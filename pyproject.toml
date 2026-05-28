@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socmed-dl"
+version = "1.0.0"
+description = "Download video/music from YouTube, Facebook, Instagram, convert to x265"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Cefneal"},
+]
+dependencies = [
+    "rich>=13.0.0",
+]
+keywords = ["youtube-dl", "yt-dlp", "downloader", "x265", "hevc", "facebook", "instagram"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Video :: Conversion",
+    "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/Cefneal/socmed-dl"
+Repository = "https://github.com/Cefneal/socmed-dl"
+
+[project.scripts]
+socmed-dl = "socmed_dl.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
