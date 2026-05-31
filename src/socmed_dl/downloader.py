@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -26,10 +27,24 @@ class CombinedFormat:
     audio_id: str
     fps: int
     vbitrate: float
+    is_avc: bool = False
 
     @property
     def size_str(self) -> str:
         return format_size(self.filesize) if self.filesize else "~?"
+
+    @property
+    def quality_label(self) -> str:
+        h = self.height
+        if h >= 2160: return "4K"
+        if h >= 1440: return "1440p"
+        if h >= 1080: return "1080p"
+        if h >= 720:  return "720p"
+        if h >= 480:  return "480p"
+        if h >= 360:  return "360p"
+        if h >= 240:  return "240p"
+        if h >= 144:  return "144p"
+        return f"{h}p" if h else "Audio"
 
 
 @dataclass
@@ -40,6 +55,20 @@ class DownloadProgress:
     eta: str = ""
     downloaded: str = ""
     total: str = ""
+
+
+CODEC_ORDER = {"VP9": 0, "AV1": 1, "x264": 2, "x265": 3}
+
+CODEC_INFO = {
+    "VP9": "Google — great quality, medium files, 60fps capable",
+    "AV1": "Latest — best compression, may not play on old devices",
+    "x264": "Universal — largest files, plays on everything",
+    "x265": "HEVC — good compression, mixed support",
+}
+
+
+def _codec_sort_key(f):
+    return (CODEC_ORDER.get(f["codec"], 99), -(f["height"] or 0))
 
 
 class Downloader:
@@ -57,7 +86,7 @@ class Downloader:
     def list_combined(
         self, url: str, cookies_file: str = "", proxy: str = "",
     ) -> tuple[list[CombinedFormat], str, float]:
-        """Fetch all formats and return combined video+audio options + title + duration"""
+        """Fetch all formats — returns EVERY distinct (codec, height) combo."""
         cmd = [self.yt_dlp, "-J", "--no-playlist", url]
         if cookies_file:
             cmd += ["--cookies", cookies_file]
@@ -79,18 +108,21 @@ class Downloader:
             vcodec = (f.get("vcodec") or "none").lower()
             acodec = (f.get("acodec") or "none").lower()
             height = f.get("height") or 0
+            width = f.get("width") or 0
             filesize = f.get("filesize") or f.get("filesize_approx") or 0
 
-            if vcodec != "none" and vcodec != "none":
+            if vcodec != "none":
                 video_formats.append({
                     "id": f.get("format_id", ""),
                     "height": height,
-                    "width": f.get("width") or 0,
+                    "width": width,
                     "codec": codec_family(vcodec),
+                    "raw_codec": vcodec,
                     "filesize": filesize,
                     "fps": f.get("fps") or 0,
                     "tbr": f.get("tbr") or 0,
                     "ext": f.get("ext", ""),
+                    "vcodec": vcodec,
                 })
             elif acodec != "none":
                 audio_formats.append({
@@ -107,17 +139,18 @@ class Downloader:
         seen = set()
         combined = []
         num = 0
-        for v in sorted(video_formats, key=lambda v: v["height"], reverse=True):
-            h = v["height"]
-            if h in seen:
+
+        for v in sorted(video_formats, key=_codec_sort_key):
+            key = (v["height"], v["codec"])
+            if key in seen:
                 continue
-            seen.add(h)
+            seen.add(key)
             num += 1
             total_size = (v["filesize"] or 0) + (best_audio["filesize"] or 0)
             combined.append(CombinedFormat(
                 num=num,
-                height=h,
-                resolution=f"{v['width']}x{h}" if h else "audio",
+                height=v["height"],
+                resolution=f"{v['width']}x{v['height']}" if v["height"] else "audio",
                 codec=v["codec"],
                 filesize=total_size,
                 video_id=v["id"],
@@ -127,6 +160,16 @@ class Downloader:
             ))
 
         return combined, title, duration
+
+    def get_codecs(self, formats: list[CombinedFormat]) -> list[str]:
+        """Extract unique, ordered codec families from a format list."""
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for f in formats:
+            if f.codec not in seen:
+                seen.add(f.codec)
+                ordered.append(f.codec)
+        return ordered
 
     def download_format(
         self, url: str, outdir: str, fmt: CombinedFormat,

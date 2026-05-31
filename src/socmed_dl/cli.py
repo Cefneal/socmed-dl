@@ -9,9 +9,10 @@ from rich.console import Console
 from socmed_dl import __version__
 from socmed_dl.app import interactive, banner
 from socmed_dl.config import load as load_config
-from socmed_dl.downloader import Downloader
+from socmed_dl.downloader import Downloader, CODEC_INFO
 from socmed_dl.utils import check_deps, find_yt_dlp, default_downloads_dir
 from socmed_dl.converter import convert_video
+from socmed_dl.animation import animate_download, animate_convert, happy_start
 
 console = Console()
 
@@ -24,26 +25,27 @@ Usage: socmed-dl [URL] [options]
 Without URL: starts interactive TUI
 
 Arguments:
-  URL                  Video URL (YouTube, TikTok, IG, FB, Twitter, etc.)
+  URL                  Video URL
 
 Options:
+  --codec              Codec preference: VP9, AV1, x264  (default: best available)
   --audio, -a          Download audio only
   --audio-format       mp3|aac|flac|opus|wav  (default: mp3)
   --output, -o DIR     Output directory     (default: ~/Downloads)
   --cookies FILE       Cookies file for auth
   --proxy URL          HTTP/HTTPS proxy
-  --list-formats       Show all formats with sizes and exit
+  --list-formats       Show all codecs + resolutions with sizes
   --format NUM         Download format # from --list-formats
   --version, -v        Show version
   --help, -h           Show this help
 
 Examples:
   socmed-dl                                Interactive TUI
-  socmed-dl "URL"                          720p → x265
-  socmed-dl "URL" --audio                  Best audio → MP3
-  socmed-dl "URL" --audio --audio-format flac
-  socmed-dl "URL" --list-formats           Show sizes
-  socmed-dl "URL" --format 3               Pick format #3
+  socmed-dl "URL"                          Best video → x265
+  socmed-dl "URL" -a                       Best audio → MP3
+  socmed-dl "URL" --codec x264             Force x264
+  socmed-dl "URL" --list-formats           Show all options
+  socmed-dl "URL" --format 3               Pick format # from list
   socmed-dl "URL" --cookies cookies.txt    Auth required
 """)
     sys.exit(0)
@@ -58,6 +60,7 @@ def main():
 
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("url", nargs="?", default=None)
+    parser.add_argument("--codec", default=None, help="VP9, AV1, or x264")
     parser.add_argument("--audio", "-a", action="store_true")
     parser.add_argument("--audio-format", default="mp3")
     parser.add_argument("--output", "-o", default=None)
@@ -69,6 +72,7 @@ def main():
     args, _ = parser.parse_known_args()
 
     if not args.url:
+        happy_start(console)
         interactive()
         return 0
 
@@ -83,60 +87,66 @@ def main():
 
     if args.list_formats:
         fmts, title, dur = dl.list_combined(args.url)
-        print(f"\n  Title: {title}")
-        print(f"  Formats:\n")
+        from socmed_dl.utils import format_duration
+        dur_str = format_duration(dur) if dur else "?"
+        print(f"\n  Title: {title}  ({dur_str})")
+        codecs = dl.get_codecs(fmts)
+        print(f"  Available codecs: {', '.join(codecs)}\n")
+        for c in codecs:
+            badge = {"VP9": "blue", "AV1": "yellow", "x264": "green", "x265": "red"}.get(c, "white")
+            desc = CODEC_INFO.get(c, "")
+            print(f"  [bold {badge}]{c}:[/] {desc}")
+            print()
+        print(f"    {'#':>3}  {'Quality':>7}  {'Codec':>6}  {'Size':>9}  {'Resolution':>12}")
+        print(f"    {'─'*3}  {'─'*7}  {'─'*6}  {'─'*9}  {'─'*12}")
         for f in fmts:
-            print(f"    #{f.num}  {f.height or 0:>4}p  {f.codec:4s}  {f.size_str:>8s}  "
-                  f"{f.resolution}")
+            q = f.quality_label
+            print(f"    {f.num:>3}  {q:>7}  {f.codec:>6}  {f.size_str:>9}  {f.resolution:>12}")
         return 0
 
+    fmts, title, dur = dl.list_combined(args.url)
+    if not fmts:
+        console.print("[red]No formats found[/]")
+        return 1
+
+    sel = None
     if args.format:
-        fmts, title, dur = dl.list_combined(args.url)
         sel = next((f for f in fmts if f.num == args.format), None)
         if not sel:
             console.print(f"[red]Format #{args.format} not found[/]")
             return 1
-    else:
-        fmts, title, dur = dl.list_combined(args.url)
-        sel = fmts[0] if fmts else None
-        if not sel:
-            console.print("[red]No formats found[/]")
+    elif args.codec:
+        codec_fmts = [f for f in fmts if f.codec.lower() == args.codec.lower()]
+        if not codec_fmts:
+            codecs = dl.get_codecs(fmts)
+            console.print(f"[red]Codec '{args.codec}' not found. Available: {', '.join(codecs)}[/]")
             return 1
-
-    progress = None
-    task_id = None
-    try:
-        from rich.progress import Progress, BarColumn, TransferSpeedColumn, TimeRemainingColumn, SpinnerColumn, TextColumn
-        progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=None),
-            "[progress.percentage]{task.percentage:>3.1f}%",
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-            console=console,
-        )
-        task_id = progress.add_task(f"[cyan]Downloading...[/]", total=None)
-
-        def on_progress(dp):
-            if dp.percent > 0:
-                if progress.tasks[task_id].total is None:
-                    progress.update(task_id, total=100)
-                progress.update(task_id, completed=dp.percent)
-            if dp.filename:
-                progress.update(task_id, description=f"[cyan]{dp.filename[:50]}")
-
-        dl.set_progress_callback(on_progress)
-    except Exception:
-        progress = None
+        sel = codec_fmts[0]
+    else:
+        sel = fmts[0]
 
     if args.audio:
-        ok = dl.download_audio(args.url, outdir, args.audio_format)
-    else:
-        ok = dl.download_format(args.url, outdir, sel)
+        ok = animate_download(
+            lambda cb: (dl.set_progress_callback(cb), dl.download_audio(
+                args.url, outdir, args.audio_format))[1],
+            title=title,
+            console=console,
+        )
+        if ok:
+            console.print(f"[green]✓ Audio saved to {outdir}[/]")
+        return 0 if ok else 1
 
-    if ok and not args.audio:
-        convert_video(outdir)
+    ok = animate_download(
+        lambda cb: (dl.set_progress_callback(cb), dl.download_format(args.url, outdir, sel))[1],
+        title=title,
+        console=console,
+    )
+
+    if ok:
+        animate_convert(
+            lambda cb: convert_video(outdir, progress_callback=cb),
+            console=console,
+        )
 
     if ok:
         console.print(f"[green]✓ Saved to {outdir}[/]")

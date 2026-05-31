@@ -1,31 +1,40 @@
-"""Interactive TUI — simple flow: URL → pick format → download"""
+"""Interactive TUI — URL → mode → pick codec → pick res → animate → done"""
 
 import os
 import sys
+import time
 
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, IntPrompt, Confirm
-from rich.progress import (
-    BarColumn, Progress, SpinnerColumn, TextColumn,
-    TimeRemainingColumn, TransferSpeedColumn,
-)
 from rich.table import Table
 from rich.text import Text
 
+
 from socmed_dl import __version__
 from socmed_dl.config import load as load_config, save as save_config
-from socmed_dl.downloader import Downloader
+from socmed_dl.downloader import Downloader, CODEC_INFO
 from socmed_dl.utils import (
     detect_platform, check_deps, format_size, format_duration,
     default_downloads_dir, platform_emoji, platform_color, find_yt_dlp,
 )
 from socmed_dl.converter import convert_video
+from socmed_dl.animation import (
+    animate_download, animate_convert, success_animation,
+    happy_start, connecting_animation,
+)
 
 console = Console()
 
 AUDIO_FORMATS = {1: "mp3", 2: "aac", 3: "flac", 4: "opus", 5: "wav"}
+
+CODEC_BADGES = {
+    "VP9": "[bold blue]VP9[/]",
+    "AV1": "[bold yellow]AV1[/]",
+    "x264": "[bold green]x264[/]",
+    "x265": "[bold red]x265[/]",
+}
 
 
 def banner() -> str:
@@ -48,6 +57,30 @@ def format_big_bits(tbr: float) -> str:
     return f"{tbr:.0f}k" if tbr else "-"
 
 
+def _quality_label(height: int) -> str:
+    if height >= 2160: return "4K"
+    if height >= 1440: return "1440p"
+    if height >= 1080: return "1080p"
+    if height >= 720:  return "720p"
+    if height >= 480:  return "480p"
+    if height >= 360:  return "360p"
+    if height >= 240:  return "240p"
+    if height >= 144:  return "144p"
+    return f"{height}p" if height else "Auto"
+
+
+def _codec_card(codec: str, desc: str, num: int, available: int, is_selected: bool = False) -> Panel:
+    mark = "◉" if is_selected else "○"
+    style = "bold cyan" if is_selected else "white"
+    return Panel(
+        f"{mark}  {codec}\n"
+        f"   [dim]{desc}[/dim]\n"
+        f"   [yellow]{available} resolution(s)[/yellow]",
+        border_style="cyan" if is_selected else "grey50",
+        width=40,
+    )
+
+
 def interactive():
     console.clear()
     console.print(banner(), style="bold cyan")
@@ -59,7 +92,7 @@ def interactive():
             f"[red]Missing: {', '.join(deps)}[/red]\n"
             "[yellow]Quick install:[/yellow]\n"
             "  Linux/macOS:  curl -sL https://is.gd/socmed_dl | bash\n"
-            "  Windows:      pip install socmed-dl yt-dlp",
+            "  Windows:      winget install yt-dlp ffmpeg",
             title="Error", border_style="red",
         ))
         return
@@ -77,18 +110,18 @@ def interactive():
         if not Confirm.ask("[bold]⚠ Platform not recognized, try anyway?", default=True):
             return
 
-    console.clear()
-    console.print(banner(), style="bold cyan")
-
-    # ── Fetch formats ─────────────────────────────────────────────────
     color = platform_color(platform)
     emoji = platform_emoji(platform)
 
-    with console.status(f"[bold {color}]{emoji} Contacting {platform}...[/]", spinner="dots"):
+    connecting_animation(console, platform.upper(), color)
+    console.clear()
+    console.print(banner(), style="bold cyan")
+
+    with console.status(f"[bold {color}]{emoji} Fetching info from {platform}...[/]", spinner="dots"):
         formats, title, duration = downloader.list_combined(url)
 
     if not formats:
-        console.print("[red]No video formats found. The video may be private/age-restricted.[/red]")
+        console.print("[red]No formats found. The video may be private/age-restricted.[/red]")
         if Confirm.ask("[bold]Try with cookies file?", default=False):
             cookies = Prompt.ask("  Path to cookies.txt")
             with console.status("Retrying..."):
@@ -98,158 +131,235 @@ def interactive():
         console.print("[red]Still no formats available[/red]")
         return
 
-    # ── Info bar ───────────────────────────────────────────────────────
     dur_str = format_duration(duration) if duration else "?"
-    info = Text.assemble(
-        (f" {emoji} ", f"bold {color}"),
-        (f"{platform.upper()}", f"bold {color}"),
-        ("  │  ", "dim"),
-        (f"📹 {title[:60]}", "bold white"),
-        ("  │  ", "dim"),
-        (f"⏱ {dur_str}", "yellow"),
+
+    info = Panel(
+        Text.assemble(
+            (f" {emoji} ", f"bold {color}"),
+            (f"{platform.upper()}", f"bold {color}"),
+            ("  │  ", "dim"),
+            (f"📹 {title[:60]}", "bold white"),
+            ("  │  ", "dim"),
+            (f"⏱ {dur_str}", "yellow"),
+        ),
+        border_style=color,
     )
-    console.print(Panel(info, border_style=color))
+    console.print(info)
 
-    # ── Format table ───────────────────────────────────────────────────
-    table = Table(box=box.SIMPLE_HEAVY, border_style="green", title="Select format")
-    table.add_column("#", style="bold yellow", width=4)
-    table.add_column("Quality", style="bold cyan", width=10)
-    table.add_column("Resolution")
-    table.add_column("Codec", style="green")
-    table.add_column("Size", style="magenta", justify="right")
-    table.add_column("FPS", justify="right")
-    table.add_column("Bitrate", justify="right")
+    # ── Step 1: Mode selection ──────────────────────────────────────────
+    console.print()
+    mode_table = Table(box=box.MINIMAL_HEAVY_HEAD, border_style="cyan", show_header=False, padding=(0, 2))
+    mode_table.add_column("#", style="bold yellow", width=4)
+    mode_table.add_column("Mode", style="bold white")
+    mode_table.add_row("[1]", "🎬  [bold]Video[/]  → pick codec + resolution, auto x265")
+    mode_table.add_row("[2]", "🎵  [bold]Audio[/] → MP3 / AAC / FLAC / Opus / WAV")
+    mode_table.add_row("[3]", "📁  [bold]Both[/]   → video + audio separately")
+    console.print(Panel(mode_table, title="[bold]📥 What to download?[/]", border_style="cyan"))
 
-    for f in formats:
-        label = f"{f.height}p" if f.height else "Auto"
-        table.add_row(
-            str(f.num),
-            label,
-            f.resolution,
-            f.codec,
-            f.size_str,
-            str(f.fps) if f.fps else "-",
-            format_big_bits(f.vbitrate),
+    mode_choice = Prompt.ask("[bold cyan]Choose[/]", default="1", choices=["1", "2", "3"])
+    is_video = mode_choice in ("1", "3")
+    is_audio = mode_choice in ("2", "3")
+
+    selected_video = None
+    selected_audio_fmt = "mp3"
+
+    # ── Step 2: Codec selection (video only) ────────────────────────────
+    if is_video:
+        console.clear()
+        console.print(banner(), style="bold cyan")
+        console.print(info)
+
+        codecs = downloader.get_codecs(formats)
+        codec_choices = [str(i + 1) for i in range(len(codecs))]
+
+        console.print(f"\n[bold]🎬 Pick a codec family:[/bold]")
+        console.print()
+
+        for i, c in enumerate(codecs):
+            count = sum(1 for f in formats if f.codec == c)
+            badge = CODEC_BADGES.get(c, c)
+            desc = CODEC_INFO.get(c, "")
+            console.print(
+                f"  [bold yellow]{i+1}.[/] {badge}  — {desc}"
+            )
+            console.print(f"      [dim]Available: {count} resolutions[/dim]")
+            console.print()
+
+        codec_idx = IntPrompt.ask(
+            "[bold cyan]Choose codec[/]",
+            default=1,
+            choices=codec_choices,
+        ) - 1
+        selected_codec = codecs[codec_idx]
+
+        # ── Step 3: Resolution picker for selected codec ────────────────
+        console.clear()
+        console.print(banner(), style="bold cyan")
+        console.print(info)
+
+        codec_formats = [f for f in formats if f.codec == selected_codec]
+        badge = CODEC_BADGES.get(selected_codec, selected_codec)
+
+        res_table = Table(
+            box=box.SIMPLE_HEAVY,
+            border_style="green",
+            title=f"[bold]{badge} — available resolutions[/]",
+            title_justify="left",
         )
+        res_table.add_column("#", style="bold yellow", width=4)
+        res_table.add_column("Quality", style="bold cyan", width=8)
+        res_table.add_column("Resolution", style="white")
+        res_table.add_column("Size", style="magenta", justify="right", width=10)
+        res_table.add_column("FPS", justify="right", width=5)
+        res_table.add_column("Bitrate", justify="right", width=8)
 
-    console.print(table)
+        for f in codec_formats:
+            res_table.add_row(
+                str(f.num),
+                f.quality_label,
+                f.resolution,
+                f.size_str,
+                str(f.fps) if f.fps else "-",
+                format_big_bits(f.vbitrate),
+            )
 
-    # If only audio, add audio format row
-    fmt_list = formats
+        console.print(res_table)
 
-    # ── Pick ───────────────────────────────────────────────────────────
-    choice = IntPrompt.ask(
-        "[bold cyan]Choose format (#)[/bold cyan]",
-        default=1,
-        choices=[str(f.num) for f in fmt_list],
-    )
-    selected = next((f for f in fmt_list if f.num == choice), fmt_list[0])
+        size_note = {
+            "VP9": "[bold blue]VP9:[/] great quality, medium files",
+            "AV1": "[bold yellow]AV1:[/] best compression, needs modern device",
+            "x264": "[bold green]x264:[/] largest files, plays on everything",
+            "x265": "[bold red]x265:[/] HEVC, good compression",
+        }.get(selected_codec, "")
 
-    # ── Audio mode? ────────────────────────────────────────────────────
-    mode = "video"
-    audio_fmt = "mp3"
-    if selected.height == 0:
-        mode = "audio"
-        t = Table(box=box.ROUNDED, border_style="cyan")
-        t.add_column("#", style="bold", width=4)
-        t.add_column("Format", style="bold")
+        if size_note:
+            console.print(f"  [dim]{size_note}[/dim]")
+
+        res_choices = [str(f.num) for f in codec_formats]
+        choice = IntPrompt.ask(
+            f"[bold cyan]Choose {selected_codec} resolution (#)[/]",
+            default=codec_formats[0].num,
+            choices=res_choices,
+        )
+        selected_video = next((f for f in codec_formats if f.num == choice), codec_formats[0])
+
+    # ── Step 4: Audio format ────────────────────────────────────────────
+    if is_audio:
+        console.print()
+        af_table = Table(box=box.MINIMAL_HEAVY_HEAD, border_style="magenta", show_header=False)
+        af_table.add_column("#", style="bold yellow", width=4)
+        af_table.add_column("Format", style="bold")
+        af_table.add_column("Note", style="dim")
+        notes = {"mp3": "Universal, best compat", "aac": "Apple ecosystem",
+                 "flac": "Lossless, large", "opus": "Best quality/size", "wav": "Uncompressed"}
         for k, v in AUDIO_FORMATS.items():
-            t.add_row(str(k), v)
-        console.print(t)
-        af = IntPrompt.ask("[bold cyan]Audio format[/]", default=1, choices=[str(k) for k in AUDIO_FORMATS])
-        audio_fmt = AUDIO_FORMATS[af]
+            af_table.add_row(f"[{k}]", v.upper(), notes.get(v, ""))
+        console.print(Panel(af_table, title="[bold]🎵 Audio format[/]", border_style="magenta"))
+        af_choice = IntPrompt.ask(
+            "[bold magenta]Choose audio format[/]",
+            default=1,
+            choices=[str(k) for k in AUDIO_FORMATS],
+        )
+        selected_audio_fmt = AUDIO_FORMATS[af_choice]
 
-    # ── Output ─────────────────────────────────────────────────────────
+    # ── Step 5: Output dir ─────────────────────────────────────────────
     outdir = Prompt.ask(
-        "[bold cyan]Save to[/bold cyan]",
+        "[bold cyan]💾 Save to[/bold cyan]",
         default=cfg.get("output_dir", default_downloads_dir()),
     )
 
-    # Save as default
     if not cfg.get("output_dir") or outdir != default_downloads_dir():
         cfg["output_dir"] = outdir
         save_config(cfg)
 
-    # ── Summary ────────────────────────────────────────────────────────
-    est_size = format_size(selected.filesize) if selected.filesize else "?"
+    # ── Step 6: Summary + Confirm ──────────────────────────────────────
+    console.clear()
+    est_size = format_size(selected_video.filesize) if selected_video and selected_video.filesize else "~?"
+
     summary = Table.grid(padding=(0, 2))
-    summary.add_column(style="bold")
+    summary.add_column(style="bold", width=14)
     summary.add_column()
-    summary.add_row("Platform:", f"[bold {color}]{emoji} {platform.capitalize()}[/]")
-    summary.add_row("File:", title[:60])
-    summary.add_row("Quality:", f"{selected.height}p ({selected.resolution})")
-    summary.add_row("Output:", outdir)
-    summary.add_row("Est. size:", f"[magenta]{est_size}[/]")
-    if mode == "video":
-        summary.add_row("→ x265:", "[green]Auto convert[/green]")
+    summary.add_row("Platform", f"[bold {color}]{emoji}  {platform.capitalize()}[/]")
+    summary.add_row("Title", title[:70])
+    summary.add_row("Duration", dur_str)
+    if is_video and selected_video:
+        summary.add_row("Codec", CODEC_BADGES.get(selected_video.codec, selected_video.codec))
+        summary.add_row("Quality", f"{selected_video.quality_label} ({selected_video.resolution})")
+        summary.add_row("Est. size", f"[magenta]{est_size}[/magenta]")
+        summary.add_row("Convert", "[green]✓ x265 (HEVC) auto[/green]")
+    if is_audio and mode_choice in ("2", "3"):
+        summary.add_row("Audio format", f"[magenta]{selected_audio_fmt.upper()}[/]")
+    summary.add_row("Output dir", f"[dim]{outdir}[/dim]")
 
-    console.print(Panel(summary, title="Summary", border_style="green"))
+    console.print(Panel(summary, title="[bold]📋 Summary[/]", border_style="green"))
 
-    if not Confirm.ask("\n[bold green]▶ Start download?[/]", default=True):
+    if not Confirm.ask("\n[bold green]▶ Hit Enter to download[/]", default=True):
         return
 
-    # ── Download ───────────────────────────────────────────────────────
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
-        "[progress.percentage]{task.percentage:>3.1f}%",
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    )
+    # ── Step 7: Download! ──────────────────────────────────────────────
+    console.clear()
+    ok = True
 
-    task_id = progress.add_task(f"[cyan]Downloading...[/]", total=None)
+    if is_video and selected_video:
+        ok = animate_download(
+            lambda cb: (
+                downloader.set_progress_callback(cb),
+                downloader.download_format(
+                    url, outdir, selected_video,
+                    cookies_file=cfg.get("cookies_file", ""),
+                    proxy=cfg.get("proxy", ""),
+                )
+            )[1],
+            title=title,
+            platform=platform,
+            color=color,
+            console=console,
+        )
 
-    def on_progress(dp):
-        if dp.percent > 0:
-            if progress.tasks[task_id].total is None:
-                progress.update(task_id, total=100)
-            progress.update(task_id, completed=dp.percent)
-        if dp.filename:
-            progress.update(task_id, description=f"[cyan]{dp.filename[:50]}")
-
-    downloader.set_progress_callback(on_progress)
-
-    ok = False
-    with progress:
-        if mode == "video":
-            ok = downloader.download_format(
-                url, outdir, selected,
-                cookies_file=cfg.get("cookies_file", ""),
-                proxy=cfg.get("proxy", ""),
-            )
-        else:
-            ok = downloader.download_audio(
-                url, outdir, audio_fmt,
-                cookies_file=cfg.get("cookies_file", ""),
+        if ok:
+            animate_convert(
+                lambda cb: convert_video(
+                    outdir,
+                    keep_original=cfg.get("keep_original", False),
+                    crf=cfg.get("crf", 28),
+                    preset=cfg.get("preset", "medium"),
+                    progress_callback=cb,
+                ),
+                console=console,
             )
 
-    # ── Convert ────────────────────────────────────────────────────────
-    if ok and mode == "video":
-        conv_task = progress.add_task("[green]Converting to x265...[/]", total=100)
-        with progress:
-            convert_video(outdir, progress_callback=lambda p: (
-                progress.update(conv_task, completed=p.get("percent", 0))
-                if p.get("status") != "done"
-                else progress.update(conv_task, completed=100,
-                                     description="[green]✓ Converted[/]")
-            ))
+    if is_audio and mode_choice in ("2", "3"):
+        ok = animate_download(
+            lambda cb: (
+                downloader.set_progress_callback(cb),
+                downloader.download_audio(
+                    url, outdir, selected_audio_fmt,
+                    cookies_file=cfg.get("cookies_file", ""),
+                )
+            )[1],
+            title=title,
+            platform=platform,
+            color=color,
+            console=console,
+        )
 
     # ── Done ───────────────────────────────────────────────────────────
-    console.print()
     if ok:
-        size_str = format_size(os.path.getsize(
-            os.path.join(outdir, f"{title}_x265.mkv") if mode == "video"
-            else os.path.join(outdir, f"{title}.{audio_fmt}")
-        )) if os.path.exists(os.path.join(outdir, f"{title}_x265.mkv") if mode == "video"
-                            else os.path.join(outdir, f"{title}.{audio_fmt}")) else "?"
-        console.print(Panel(
-            f"[bold green]✓ Done![/]  [dim]{size_str}[/]",
-            border_style="green",
-        ))
+        found_files = []
+        if os.path.isdir(outdir):
+            found_files = [f for f in os.listdir(outdir) if f.startswith(title[:30])]
+        size_str = ""
+        if found_files:
+            try:
+                total = sum(os.path.getsize(os.path.join(outdir, f)) for f in found_files)
+                size_str = format_size(total)
+            except OSError:
+                pass
+
+        success_animation(console, title=title, size=size_str)
     else:
         console.print(Panel("[red]Download failed![/]", border_style="red"))
 
+    console.print()
     if Confirm.ask("\n[bold cyan]Download another?[/]", default=True):
         interactive()
