@@ -1,12 +1,12 @@
-# Maintainer: socmed-dl
+# Maintainer: Cefneal
 # PKGBUILD for socmed-dl - Social Media Downloader
 
 pkgname=socmed-dl
-pkgver=1.0.0
+pkgver=2.0.0
 pkgrel=1
-pkgdesc="Download video/music from YouTube, Facebook, Instagram in x265 format"
+pkgdesc="Download video/music from 10+ platforms, convert to x265/AV1/VP9"
 arch=('any')
-url="https://github.com/socmed-dl/socmed-dl"
+url="https://github.com/Cefneal/socmed-dl"
 license=('MIT')
 depends=(
     'python'
@@ -15,7 +15,7 @@ depends=(
     'ffmpeg'
 )
 makedepends=('python-build' 'python-installer' 'python-wheel' 'python-setuptools')
-source=("$pkgname-$pkgver.tar.gz::https://github.com/socmed-dl/socmed-dl/archive/v$pkgver.tar.gz")
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Cefneal/socmed-dl/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {
@@ -26,4 +26,5 @@ build() {
 package() {
     cd "$srcdir/$pkgname-$pkgver"
     python -m installer --destdir="$pkgdir" dist/*.whl
+    install -Dm644 pyproject.toml "$pkgdir/usr/share/doc/$pkgname/pyproject.toml"
 }

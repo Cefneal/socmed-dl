@@ -1,5 +1,6 @@
 """Allow running as: python -m socmed_dl"""
 
-from socmed_dl.main import main
+import sys
+from socmed_dl.cli import main
 
-main()
+sys.exit(main())

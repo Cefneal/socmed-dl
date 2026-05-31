@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "socmed-dl"
-version = "1.0.0"
-description = "Download video/music from YouTube, Facebook, Instagram, convert to x265"
+version = "2.0.0"
+description = "Download video/music from 10+ platforms, convert to x265/AV1/VP9"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -15,21 +15,23 @@ authors = [
 dependencies = [
     "rich>=13.0.0",
 ]
-keywords = ["youtube-dl", "yt-dlp", "downloader", "x265", "hevc", "facebook", "instagram"]
+keywords = ["youtube-dl", "yt-dlp", "downloader", "x265", "hevc", "facebook", "instagram", "tiktok", "twitter", "reddit"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Multimedia :: Video :: Conversion",
     "Environment :: Console",
+    "Development Status :: 5 - Production/Stable",
 ]
 
 [project.urls]
 Homepage = "https://github.com/Cefneal/socmed-dl"
 Repository = "https://github.com/Cefneal/socmed-dl"
+Documentation = "https://github.com/Cefneal/socmed-dl#readme"
 
 [project.scripts]
-socmed-dl = "socmed_dl.main:main"
+socmed-dl = "socmed_dl.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
