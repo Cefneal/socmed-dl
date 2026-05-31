@@ -1,41 +1,109 @@
-"""CLI animations — chibi characters, animated progress, fun download vibes"""
+"""CLI animations — anime ASCII art characters for download/convert/success"""
 
-import random
-import threading
 import time
 from typing import Callable
 
-from rich.live import Live
 from rich.panel import Panel
 from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
+    BarColumn, Progress, SpinnerColumn, TextColumn,
+    TimeRemainingColumn, TransferSpeedColumn,
 )
-from rich.text import Text
-from rich.table import Table
-from rich.console import Console, Group
+from rich.console import Console
 
+# ── Anime-style ASCII art frames (NO emoji) ──────────────────────────
 
-_CHIBI_FRAMES = [
+_CONNECT_FRAMES = [
     r"""
      ∩( ・ω・)∩
-    """,
-    r"""
-      ( ・ω・)
+     ~ connecting
     """,
     r"""
      ( ・ω・)∩
+     ~ connecting.
     """,
     r"""
      ( ・ω・)
+     ~ connecting..
+    """,
+    r"""
+     ( ・ω・)∩
+     ~ connecting...
     """,
 ]
 
-_DANCE_CHIBI = [
+_DOWNLOAD_FRAMES = [
+    r"""
+     ╭( ・ω・)╮
+    ╭┻━━━━┻╮
+    ┃ ▌╭╮  ┃
+    ╰┳━━━━┳╯
+    """,
+    r"""
+     ╭( ・ω・)╮
+    ╭┻━━━━┻╮
+    ┃ ▌╭╮▌ ┃
+    ╰┳━━━━┳╯
+    """,
+    r"""
+     ╭(｀・ω・´)╮
+    ╭┻━━━━┻╮
+    ┃ ▌╭╮▌ ┃
+    ╰┳━━━━┳╯
+    """,
+    r"""
+     ╭(｀・ω・´)╮
+    ╭┻━━━━┻╮
+    ┃ ▌╭╮▌ ┃
+    ╰┳━━━━┳╯
+    """,
+]
+
+_CONVERT_FRAMES = [
+    r"""
+     (｀・ω・´)
+      ╔════╗
+      ║ ██ ║
+      ╚════╝
+    """,
+    r"""
+     (｀・ω・´)
+      ╔════╗
+      ║ ██ ║
+      ╚════╝
+       ░░░
+    """,
+    r"""
+     (｀・ω・´)
+      ╔════╗
+      ║ ██ ║
+      ╚════╝
+      ░░░░
+    """,
+    r"""
+     (｀・ω・´)
+      ╔════╗
+      ║ ██ ║
+      ╚════╝
+     ░░░░░
+    """,
+]
+
+_SUCCESS_FRAMES = [
+    r"""
+      ＼(^▽^)／
+       ／＼
+    """,
+    r"""
+      ／(^▽^)＼
+      ＼ ／
+    """,
+    r"""
+      ＼(^▽^)／
+       ／＼
+    """,
+]
+
+_DANCE_FRAMES = [
     r"""
       ♪┏(・o・)┛♪
     """,
@@ -44,157 +112,41 @@ _DANCE_CHIBI = [
     """,
 ]
 
-_WAVE_CHIBI = [
+_IDLE_FRAMES = [
     r"""
-    ( ´▽`)/✋
+     (　・ω・)
     """,
     r"""
-    ＼(´▽`)/✋
-    """,
-]
-
-_SLEEP_CHIBI = [
-    r"""
-     (　-ω-) 💤
+     (　・ω・)∩
     """,
     r"""
-     (￣ρ￣).zz💤
-    """,
-]
-
-_HAPPY_CHIBI = [
-    r"""
-      ＼(^▽^)／
+     (　・ω・)
     """,
     r"""
-      (ﾉ◕ヮ◕)ﾉ
+      (　・ω・)∩
     """,
-    r"""
-      \(★ω★)/
-    """,
-]
-
-_DOWNLOAD_CHIBI = [
-    r"""
-     (◕‿◕)✧
-     ↓↓↓↓↓
-    """,
-    r"""
-     (◕‿◕)✧
-     ╰⋃╯
-    """,
-    r"""
-     (◕‿◕)✧
-     📥📥📥
-    """,
-]
-
-_CONVERT_CHIBI = [
-    r"""
-     (｀ω´)
-     ⚙️⚙️⚙️
-    """,
-    r"""
-     (｀ω´)
-     🔄🔄🔄
-    """,
-]
-
-_PAW_FRAMES = ["(´･ω･`)" , "(｀・ω・´)" , "（・ω・）" , "(・ω・)☀" , "₍˄·͈༝·͈˄₎"]
-_RUNNING_CAT = ["ᓚᘏᗢ", "ᓚₒᘏᗢ", "ᓚₒᘏᗢ", "ᓚᘏᗢ"]
-
-# ── Apple-style download progress frames ──────────────────────────────
-_PROGRESS_FRAMES = [
-    "▱▱▱▱▱▱▱▱▱▱",
-    "▰▱▱▱▱▱▱▱▱▱",
-    "▰▰▱▱▱▱▱▱▱▱",
-    "▰▰▰▱▱▱▱▱▱▱",
-    "▰▰▰▰▱▱▱▱▱▱",
-    "▰▰▰▰▰▱▱▱▱▱",
-    "▰▰▰▰▰▰▱▱▱▱",
-    "▰▰▰▰▰▰▰▱▱▱",
-    "▰▰▰▰▰▰▰▰▱▱",
-    "▰▰▰▰▰▰▰▰▰▱",
-    "▰▰▰▰▰▰▰▰▰▰",
 ]
 
 _PLATFORM_KITS = {
-    "youtube": "▶️🎬",
-    "facebook": "👍📘",
-    "instagram": "📸🌈",
-    "tiktok": "🎵💃",
-    "twitter": "🐦🔥",
-    "reddit": "🤖👽",
-    "twitch": "📺🎮",
-    "vimeo": "🎥🎞",
-    "dailymotion": "🎬🎭",
-    "tumblr": "💬✨",
+    "youtube": "▶", "facebook": "f", "instagram": "@", "tiktok": "♪",
+    "twitter": "♯", "reddit": "r/", "twitch": "📺", "vimeo": "▷",
+    "dailymotion": "▷", "tumblr": "t",
 }
 
 
-def _breathe() -> str:
-    return random.choice(_PAW_FRAMES)
+def _frames(base, duration=0.25):
+    """Generator that cycles through frames."""
+    i = 0
+    while True:
+        yield base[i % len(base)]
+        i += 1
+        time.sleep(duration)
 
 
 def _progress_bar(percent: float, width: int = 20) -> str:
     filled = int(width * percent / 100)
     bar = "█" * filled + "░" * (width - filled)
     return bar
-
-
-class ChibiProgress:
-    def __init__(self, console: Console):
-        self.console = console
-        self._stop = False
-        self._current_desc = ""
-        self._percent = 0.0
-        self._speed = ""
-        self._eta = ""
-        self._state = "idle"
-
-    def start(self, description: str = ""):
-        self._stop = False
-        self._current_desc = description
-
-    def update(self, percent: float = 0, speed: str = "", eta: str = "", description: str = ""):
-        self._percent = percent
-        if speed: self._speed = speed
-        if eta: self._eta = eta
-        if description: self._current_desc = description
-
-    def set_state(self, state: str):
-        self._state = state
-
-    def stop(self):
-        self._stop = True
-
-    def get_renderable(self) -> Panel:
-        if self._state == "download":
-            chibi = _DOWNLOAD_CHIBI[int(time.time() * 2) % len(_DOWNLOAD_CHIBI)]
-        elif self._state == "convert":
-            chibi = _CONVERT_CHIBI[int(time.time() * 2) % len(_CONVERT_CHIBI)]
-        elif self._state == "connecting":
-            chibi = _WAVE_CHIBI[int(time.time() * 3) % len(_WAVE_CHIBI)]
-        else:
-            chibi = _CHIBI_FRAMES[int(time.time() * 2) % len(_CHIBI_FRAMES)]
-
-        bar = _progress_bar(self._percent)
-        info = Table.grid(padding=(0, 2))
-        info.add_column(style="bold", width=12)
-        info.add_column()
-        info.add_row("Status", f"[cyan]{self._current_desc}[/]")
-        info.add_row("Progress", f"[green]{bar}[/] [bold]{self._percent:.1f}%[/]")
-        if self._speed:
-            info.add_row("Speed", f"[yellow]{self._speed}[/]")
-        if self._eta:
-            info.add_row("ETA", f"[magenta]{self._eta}[/]")
-
-        return Panel(
-            Group(f"[bold cyan]{chibi}[/]", info),
-            border_style="cyan",
-            title="[bold]socmed-dl[/]",
-            title_align="left",
-        )
 
 
 def animate_download(
@@ -252,14 +204,14 @@ def animate_convert(
         console=console,
     )
 
-    conv_task = progress.add_task("[green]Converting to x265...", total=1)
+    conv_task = progress.add_task("[green]Converting...", total=1)
 
     def on_convert(p: dict):
         if p.get("status") == "start":
             progress.update(conv_task, total=1, description=f"[green]Convert {p.get('file', '')}...")
             progress.update(conv_task, completed=0)
         elif p.get("status") == "done":
-            progress.update(conv_task, completed=1, description="[green]✓ Converted to x265")
+            progress.update(conv_task, completed=1, description="[green]✓ Convert complete")
             result[0] = True
         elif p.get("status") == "error":
             progress.update(conv_task, description="[red]✗ Conversion failed")
@@ -273,7 +225,7 @@ def animate_convert(
 def success_animation(console: Console, title: str = "", size: str = ""):
     for i in range(4):
         console.clear()
-        frame = _HAPPY_CHIBI[i % len(_HAPPY_CHIBI)]
+        frame = _SUCCESS_FRAMES[i % len(_SUCCESS_FRAMES)]
         console.print(f"\n\n[bold green]{frame}[/]")
         console.print(f"\n[bold green]  ✓ Download Complete![/]")
         if title:
@@ -282,37 +234,37 @@ def success_animation(console: Console, title: str = "", size: str = ""):
             console.print(f"\n  [yellow]╭{'─'*25}╮")
             console.print(f"  │  File size: [bold]{size}[/bold]  │")
             console.print(f"  ╰{'─'*25}╯")
-
-        stars = "✨" * (i + 1)
-        console.print(f"\n  [bold yellow]{stars}[/]")
         time.sleep(0.4)
 
-    console.clear()
-    console.print(f"\n\n[bold green]  (ﾉ◕ヮ◕)ﾉ  Done! ヽ(◕ヮ◕ヽ)[/]")
-    if size:
-        console.print(f"\n  [yellow]File size: {size}[/]")
-    time.sleep(0.5)
+    # Final dance
+    for _ in range(2):
+        for f in _DANCE_FRAMES:
+            console.clear()
+            console.print(f"\n\n[bold green]{f}[/]")
+            console.print(f"\n[bold green]  (ﾉ ・ω・)ﾉ  Done! ヽ(・ω・ヽ)[/]")
+            if size:
+                console.print(f"\n  [yellow]File size: {size}[/]")
+            time.sleep(0.3)
 
 
 def happy_start(console: Console):
     console.print(Panel(
-        Text.assemble(
-            ("  ᕦ(ò_óˇ)ᕤ  ", "bold cyan"),
-            ("socmed-dl ready to download!", "white"),
-        ),
+        r"""
+  ╭( ・ω・)╮
+  socmed-dl ready!
+""",
         border_style="cyan",
     ))
 
 
 def connecting_animation(console: Console, platform: str, color: str = "cyan"):
-    kit = _PLATFORM_KITS.get(platform.lower(), "🌐")
+    kit = _PLATFORM_KITS.get(platform.lower(), "?")
     for i in range(3):
         console.clear()
-        frame = _WAVE_CHIBI[i % len(_WAVE_CHIBI)]
-        console.print(f"\n\n\n[bold {color}]{frame}[/]")
+        frame = _CONNECT_FRAMES[i % len(_CONNECT_FRAMES)]
+        console.print(f"\n\n[bold {color}]{frame}[/]")
         dots = "." * (i + 1)
-        console.print(f"\n[bold {color}]  ~ Connecting to {platform}{dots} ~[/]")
-        console.print(f"\n[dim]  {kit}  [/dim]")
+        console.print(f"\n[bold {color}]  [{kit}] Connecting to {platform}{dots}[/]")
         time.sleep(0.35 + i * 0.1)
 
 
@@ -324,22 +276,13 @@ def show_progress_card(
     eta: str = "",
     platform: str = "",
 ):
-    chibi = _breathe()
     bar = _progress_bar(percent)
+    frame = _IDLE_FRAMES[int(time.time() * 2) % len(_IDLE_FRAMES)]
     console.clear()
-
-    info = Table.grid(padding=(0, 2))
-    info.add_column(style="bold", width=12)
-    info.add_column()
-    info.add_row("Status", f"[cyan]{description}[/]")
-    info.add_row("Progress", f"[green]{bar}[/] [bold]{percent:.1f}%[/]")
+    console.print(f"\n[bold cyan]{frame}[/]")
+    console.print(f"  Status: [cyan]{description}[/]")
+    console.print(f"  [green]{bar}[/] [bold]{percent:.1f}%[/]")
     if speed:
-        info.add_row("Speed", f"[yellow]{speed}[/]")
+        console.print(f"  Speed: [yellow]{speed}[/]")
     if eta:
-        info.add_row("ETA", f"[magenta]{eta}[/]")
-
-    console.print(Panel(
-        Group(f"[bold cyan]{chibi}[/]", info),
-        border_style="cyan",
-        title=f"[bold]{' 📥 ' if 'Download' in description else ' 🔄 '} {platform}[/]",
-    ))
+        console.print(f"  ETA: [magenta]{eta}[/]")

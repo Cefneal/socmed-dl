@@ -1,5 +1,5 @@
 """socmed-dl: Social Media Downloader - YouTube, Facebook, Instagram"""
 
-__version__ = "2.1.1"
+__version__ = "2.2.0"
 __author__ = "Cefneal"
 __license__ = "MIT"

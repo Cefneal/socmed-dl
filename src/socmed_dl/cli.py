@@ -28,7 +28,9 @@ Arguments:
   URL                  Video URL
 
 Options:
-  --codec              Codec preference: VP9, AV1, x264  (default: best available)
+  --codec              Codec preference: VP9, AV1, x264  (default: best)
+  --keep-original      Don't re-encode, keep original codec
+  --to-x265            Convert to x265 (HEVC) after download
   --audio, -a          Download audio only
   --audio-format       mp3|aac|flac|opus|wav  (default: mp3)
   --output, -o DIR     Output directory     (default: ~/Downloads)
@@ -39,14 +41,10 @@ Options:
   --version, -v        Show version
   --help, -h           Show this help
 
-Examples:
-  socmed-dl                                Interactive TUI
-  socmed-dl "URL"                          Best video → x265
-  socmed-dl "URL" -a                       Best audio → MP3
-  socmed-dl "URL" --codec x264             Force x264
-  socmed-dl "URL" --list-formats           Show all options
-  socmed-dl "URL" --format 3               Pick format # from list
-  socmed-dl "URL" --cookies cookies.txt    Auth required
+CLI flow (no auto convert):
+  socmed-dl "URL"               Best format, no re-encode
+  socmed-dl "URL" --to-x265     Best format → x265 convert
+  socmed-dl "URL" --codec x264  Force x264, no re-encode
 """)
     sys.exit(0)
 
@@ -61,6 +59,8 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("url", nargs="?", default=None)
     parser.add_argument("--codec", default=None, help="VP9, AV1, or x264")
+    parser.add_argument("--keep-original", action="store_true", help="No re-encode")
+    parser.add_argument("--to-x265", action="store_true", help="Convert to x265")
     parser.add_argument("--audio", "-a", action="store_true")
     parser.add_argument("--audio-format", default="mp3")
     parser.add_argument("--output", "-o", default=None)
@@ -111,19 +111,25 @@ def main():
 
     sel = None
     if args.format:
-        sel = next((f for f in fmts if f.num == args.format), None)
+        if args.codec:
+            cfmts = Downloader.filter_by_codec(fmts, args.codec)
+            sel = next((f for f in cfmts if f.num == args.format), None)
+        else:
+            sel = next((f for f in fmts if f.num == args.format), None)
         if not sel:
             console.print(f"[red]Format #{args.format} not found[/]")
             return 1
     elif args.codec:
-        codec_fmts = [f for f in fmts if f.codec.lower() == args.codec.lower()]
-        if not codec_fmts:
+        cfmts = Downloader.filter_by_codec(fmts, args.codec)
+        if not cfmts:
             codecs = dl.get_codecs(fmts)
             console.print(f"[red]Codec '{args.codec}' not found. Available: {', '.join(codecs)}[/]")
             return 1
-        sel = codec_fmts[0]
+        sel = cfmts[0]
     else:
         sel = fmts[0]
+
+    do_convert = args.to_x265 and not args.keep_original
 
     if args.audio:
         ok = animate_download(
@@ -142,7 +148,8 @@ def main():
         console=console,
     )
 
-    if ok:
+    if ok and do_convert:
+        console.print("[yellow]Converting to x265...[/]")
         animate_convert(
             lambda cb: convert_video(outdir, progress_callback=cb),
             console=console,

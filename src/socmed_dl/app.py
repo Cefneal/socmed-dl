@@ -1,4 +1,4 @@
-"""Interactive TUI — URL → mode → pick codec → pick res → animate → done"""
+"""Interactive TUI — URL → mode → pick codec → pick res → convert? → done"""
 
 import os
 import sys
@@ -10,7 +10,6 @@ from rich.panel import Panel
 from rich.prompt import Prompt, IntPrompt, Confirm
 from rich.table import Table
 from rich.text import Text
-
 
 from socmed_dl import __version__
 from socmed_dl.config import load as load_config, save as save_config
@@ -34,6 +33,12 @@ CODEC_BADGES = {
     "AV1": "[bold yellow]AV1[/]",
     "x264": "[bold green]x264[/]",
     "x265": "[bold red]x265[/]",
+}
+
+CONVERT_CHOICES = {
+    1: ("x265", True),
+    2: ("x264", True),
+    3: ("keep original", False),
 }
 
 
@@ -66,19 +71,15 @@ def _quality_label(height: int) -> str:
     if height >= 360:  return "360p"
     if height >= 240:  return "240p"
     if height >= 144:  return "144p"
-    return f"{height}p" if height else "Auto"
+    return f"{height}p" if height else "Audio"
 
 
-def _codec_card(codec: str, desc: str, num: int, available: int, is_selected: bool = False) -> Panel:
-    mark = "◉" if is_selected else "○"
-    style = "bold cyan" if is_selected else "white"
-    return Panel(
-        f"{mark}  {codec}\n"
-        f"   [dim]{desc}[/dim]\n"
-        f"   [yellow]{available} resolution(s)[/yellow]",
-        border_style="cyan" if is_selected else "grey50",
-        width=40,
-    )
+def _convert_menu_label(chosen_codec: str) -> str:
+    if chosen_codec == "x264":
+        return "x265 (HEVC) — ~50% smaller, slower encode"
+    if chosen_codec in ("VP9", "AV1"):
+        return "Keep original — no re-encode needed"
+    return "x265 (HEVC) — better compression"
 
 
 def interactive():
@@ -144,17 +145,17 @@ def interactive():
         ),
         border_style=color,
     )
-    console.print(info)
 
-    # ── Step 1: Mode selection ──────────────────────────────────────────
+    # ── Step 1: Mode ─────────────────────────────────────────────────
+    console.print(info)
     console.print()
     mode_table = Table(box=box.MINIMAL_HEAVY_HEAD, border_style="cyan", show_header=False, padding=(0, 2))
     mode_table.add_column("#", style="bold yellow", width=4)
     mode_table.add_column("Mode", style="bold white")
-    mode_table.add_row("[1]", "🎬  [bold]Video[/]  → pick codec + resolution, auto x265")
+    mode_table.add_row("[1]", "🎬  [bold]Video[/]  → pick codec + resolution")
     mode_table.add_row("[2]", "🎵  [bold]Audio[/] → MP3 / AAC / FLAC / Opus / WAV")
     mode_table.add_row("[3]", "📁  [bold]Both[/]   → video + audio separately")
-    console.print(Panel(mode_table, title="[bold]📥 What to download?[/]", border_style="cyan"))
+    console.print(Panel(mode_table, title="[bold]What to download?[/]", border_style="cyan"))
 
     mode_choice = Prompt.ask("[bold cyan]Choose[/]", default="1", choices=["1", "2", "3"])
     is_video = mode_choice in ("1", "3")
@@ -163,7 +164,7 @@ def interactive():
     selected_video = None
     selected_audio_fmt = "mp3"
 
-    # ── Step 2: Codec selection (video only) ────────────────────────────
+    # ── Step 2: Codec picker ─────────────────────────────────────────
     if is_video:
         console.clear()
         console.print(banner(), style="bold cyan")
@@ -172,7 +173,7 @@ def interactive():
         codecs = downloader.get_codecs(formats)
         codec_choices = [str(i + 1) for i in range(len(codecs))]
 
-        console.print(f"\n[bold]🎬 Pick a codec family:[/bold]")
+        console.print(f"\n[bold]Pick a codec family:[/bold]")
         console.print()
 
         for i, c in enumerate(codecs):
@@ -192,12 +193,12 @@ def interactive():
         ) - 1
         selected_codec = codecs[codec_idx]
 
-        # ── Step 3: Resolution picker for selected codec ────────────────
+        # ── Step 3: Resolution picker (renumbered from 1!) ───────────
         console.clear()
         console.print(banner(), style="bold cyan")
         console.print(info)
 
-        codec_formats = [f for f in formats if f.codec == selected_codec]
+        codec_formats = Downloader.filter_by_codec(formats, selected_codec)
         badge = CODEC_BADGES.get(selected_codec, selected_codec)
 
         res_table = Table(
@@ -238,12 +239,50 @@ def interactive():
         res_choices = [str(f.num) for f in codec_formats]
         choice = IntPrompt.ask(
             f"[bold cyan]Choose {selected_codec} resolution (#)[/]",
-            default=codec_formats[0].num,
+            default=1,
             choices=res_choices,
         )
-        selected_video = next((f for f in codec_formats if f.num == choice), codec_formats[0])
+        selected_video = codec_formats[choice - 1]
 
-    # ── Step 4: Audio format ────────────────────────────────────────────
+    # ── Step 4: Convert choice (NO auto x265!) ──────────────────────
+    do_convert = False
+    convert_codec = ""
+
+    if is_video and selected_video:
+        console.clear()
+        console.print(banner(), style="bold cyan")
+        console.print(info)
+
+        console.print(f"\n[bold]Convert options for [green]{selected_video.quality_label}[/] [green]{selected_codec}[/]:[/]")
+        console.print()
+
+        convert_table = Table(box=box.MINIMAL_HEAVY_HEAD, border_style="yellow", show_header=False)
+        convert_table.add_column("#", style="bold yellow", width=4)
+        convert_table.add_column("Option", style="bold")
+        convert_table.add_column("Note", style="dim")
+        convert_table.add_row("[1]", "[bold red]x265[/] (HEVC)", "~50% smaller file, slower encode, newer devices")
+        convert_table.add_row("[2]", "[bold green]x264[/] (AVC)", "plays on everything, fast encode, larger file")
+        convert_table.add_row("[3]", "[bold white]Keep original[/]", f"keep as {selected_codec}, no re-encode")
+        console.print(convert_table)
+        console.print()
+
+        conv_choice = Prompt.ask(
+            "[bold cyan]Convert to?[/]",
+            default="1",
+            choices=["1", "2", "3"],
+        )
+
+        if conv_choice == "1":
+            do_convert = True
+            convert_codec = "x265"
+        elif conv_choice == "2":
+            do_convert = True
+            convert_codec = "x264"
+        else:
+            do_convert = False
+            convert_codec = selected_codec
+
+    # ── Step 5: Audio format ─────────────────────────────────────────
     if is_audio:
         console.print()
         af_table = Table(box=box.MINIMAL_HEAVY_HEAD, border_style="magenta", show_header=False)
@@ -254,7 +293,7 @@ def interactive():
                  "flac": "Lossless, large", "opus": "Best quality/size", "wav": "Uncompressed"}
         for k, v in AUDIO_FORMATS.items():
             af_table.add_row(f"[{k}]", v.upper(), notes.get(v, ""))
-        console.print(Panel(af_table, title="[bold]🎵 Audio format[/]", border_style="magenta"))
+        console.print(Panel(af_table, title="[bold]Audio format[/]", border_style="magenta"))
         af_choice = IntPrompt.ask(
             "[bold magenta]Choose audio format[/]",
             default=1,
@@ -262,9 +301,9 @@ def interactive():
         )
         selected_audio_fmt = AUDIO_FORMATS[af_choice]
 
-    # ── Step 5: Output dir ─────────────────────────────────────────────
+    # ── Step 6: Output dir ──────────────────────────────────────────
     outdir = Prompt.ask(
-        "[bold cyan]💾 Save to[/bold cyan]",
+        "[bold cyan]Save to[/bold cyan]",
         default=cfg.get("output_dir", default_downloads_dir()),
     )
 
@@ -272,7 +311,7 @@ def interactive():
         cfg["output_dir"] = outdir
         save_config(cfg)
 
-    # ── Step 6: Summary + Confirm ──────────────────────────────────────
+    # ── Step 7: Summary ──────────────────────────────────────────────────
     console.clear()
     est_size = format_size(selected_video.filesize) if selected_video and selected_video.filesize else "~?"
 
@@ -286,17 +325,20 @@ def interactive():
         summary.add_row("Codec", CODEC_BADGES.get(selected_video.codec, selected_video.codec))
         summary.add_row("Quality", f"{selected_video.quality_label} ({selected_video.resolution})")
         summary.add_row("Est. size", f"[magenta]{est_size}[/magenta]")
-        summary.add_row("Convert", "[green]✓ x265 (HEVC) auto[/green]")
+        if do_convert:
+            summary.add_row("→ Convert", f"[bold red]{convert_codec}[/] [dim](re-encode)[/dim]")
+        else:
+            summary.add_row("→ Keep", f"{selected_codec} [dim](no re-encode)[/dim]")
     if is_audio and mode_choice in ("2", "3"):
         summary.add_row("Audio format", f"[magenta]{selected_audio_fmt.upper()}[/]")
     summary.add_row("Output dir", f"[dim]{outdir}[/dim]")
 
-    console.print(Panel(summary, title="[bold]📋 Summary[/]", border_style="green"))
+    console.print(Panel(summary, title="[bold]Summary[/]", border_style="green"))
 
-    if not Confirm.ask("\n[bold green]▶ Hit Enter to download[/]", default=True):
+    if not Confirm.ask("\n[bold green]▶ Start download?", default=True):
         return
 
-    # ── Step 7: Download! ──────────────────────────────────────────────
+    # ── Step 8: Download! ──────────────────────────────────────────────
     console.clear()
     ok = True
 
@@ -316,7 +358,7 @@ def interactive():
             console=console,
         )
 
-        if ok:
+        if ok and do_convert:
             animate_convert(
                 lambda cb: convert_video(
                     outdir,
@@ -361,5 +403,5 @@ def interactive():
         console.print(Panel("[red]Download failed![/]", border_style="red"))
 
     console.print()
-    if Confirm.ask("\n[bold cyan]Download another?[/]", default=True):
+    if Confirm.ask("\n[bold cyan]Download another?", default=True):
         interactive()

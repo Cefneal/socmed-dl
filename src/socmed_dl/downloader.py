@@ -171,6 +171,14 @@ class Downloader:
                 ordered.append(f.codec)
         return ordered
 
+    @staticmethod
+    def filter_by_codec(formats: list[CombinedFormat], codec: str) -> list[CombinedFormat]:
+        """Filter formats by codec family and renumber from 1."""
+        filtered = [f for f in formats if f.codec.lower() == codec.lower()]
+        for i, f in enumerate(filtered, 1):
+            f.num = i
+        return filtered
+
     def download_format(
         self, url: str, outdir: str, fmt: CombinedFormat,
         cookies_file: str = "", proxy: str = "",
