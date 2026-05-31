@@ -1,4 +1,4 @@
-"""CLI animations — anime ASCII art characters for download/convert/success"""
+"""CLI animations — Braille/block ASCII art animated like GIF"""
 
 import time
 from typing import Callable
@@ -10,137 +10,222 @@ from rich.progress import (
 )
 from rich.console import Console
 
-# ── Anime-style ASCII art frames (NO emoji) ──────────────────────────
+# ══════════════════════════════════════════════════════════════════════
+#  ASCII art frames using Braille (⣿⣶⣦⣤⣀) & block (▄▀█▓▒░) chars
+#  Each set cycles like a GIF for smooth animation
+# ══════════════════════════════════════════════════════════════════════
 
 _CONNECT_FRAMES = [
     r"""
-     ∩( ・ω・)∩
-     ~ connecting
+     ⢀⣀⣀⣀⣀⣀⡀
+    ⢠⣿⣿⣿⣿⣿⣿⣿⣄
+    ⣿⣿⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⡏⠉⠉⠉⣹⣿⣿
+    ⣿⣿⣇⣀⣀⣀⣸⣿⣿
+    ⣿⣿⣿⠟⠛⠻⣿⣿⣿
+    ⠘⢿⣿⣿⣿⣿⣿⡿⠁
     """,
     r"""
-     ( ・ω・)∩
-     ~ connecting.
+     ⢀⣀⣀⣀⣀⣀⡀
+    ⢠⣿⣿⣿⣿⣿⣿⣿⣄
+    ⣿⣿⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⡏⠒⠒⠒⣹⣿⣿
+    ⣿⣿⣇⣀⣀⣀⣸⣿⣿
+    ⣿⣿⣿⠟⠛⠻⣿⣿⣿
+    ⠘⢿⣿⣿⣿⣿⣿⡿⠁
     """,
     r"""
-     ( ・ω・)
-     ~ connecting..
+     ⢀⣀⣀⣀⣀⣀⡀
+    ⢠⣿⣿⣿⣿⣿⣿⣿⣄
+    ⣿⣿⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⡏⠂⠂⠂⣹⣿⣿
+    ⣿⣿⣇⣀⣀⣀⣸⣿⣿
+    ⣿⣿⣿⠟⠛⠻⣿⣿⣿
+    ⠘⢿⣿⣿⣿⣿⣿⡿⠁
     """,
     r"""
-     ( ・ω・)∩
-     ~ connecting...
+     ⢀⣀⣀⣀⣀⣀⡀
+    ⢠⣿⣿⣿⣿⣿⣿⣿⣄
+    ⣿⣿⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⡏⠉⠉⠉⣹⣿⣿
+    ⣿⣿⣇⣀⣀⣀⣸⣿⣿
+    ⣿⣿⣿⠟⠛⠻⣿⣿⣿
+    ⠘⢿⣿⣿⣿⣿⣿⡿⠁
     """,
 ]
 
 _DOWNLOAD_FRAMES = [
     r"""
-     ╭( ・ω・)╮
-    ╭┻━━━━┻╮
-    ┃ ▌╭╮  ┃
-    ╰┳━━━━┳╯
+     ⣀⣀⣀⣀⣀
+    ⣿⣿⣿⣿⣿⣿
+    ⣿⣁⣁⣿⣁⣁⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣀⣀⣀⣀⣀⣿
+    ⠻⣦⡀⠀⠀⢀⣴⠟
+       ⠙⣿⣿⠋
     """,
     r"""
-     ╭( ・ω・)╮
-    ╭┻━━━━┻╮
-    ┃ ▌╭╮▌ ┃
-    ╰┳━━━━┳╯
+     ⣀⣀⣀⣀⣀
+    ⣿⣿⣿⣿⣿⣿
+    ⣿⣁⣁⣿⣁⣁⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣀⣀⣀⣀⣀⣿
+    ⠻⣦⡀⢀⡀⢀⣴⠟
+       ⠙⣿⣿⠋
     """,
     r"""
-     ╭(｀・ω・´)╮
-    ╭┻━━━━┻╮
-    ┃ ▌╭╮▌ ┃
-    ╰┳━━━━┳╯
+     ⣀⣀⣀⣀⣀
+    ⣿⣿⣿⣿⣿⣿
+    ⣿⣁⣁⣿⣁⣁⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣀⣀⣀⣀⣀⣿
+    ⠻⣦⡀⢀⡀⢀⣴⠟
+        ⡇⣿⣿⡇
     """,
     r"""
-     ╭(｀・ω・´)╮
-    ╭┻━━━━┻╮
-    ┃ ▌╭╮▌ ┃
-    ╰┳━━━━┳╯
+     ⣀⣀⣀⣀⣀
+    ⣿⣿⣿⣿⣿⣿
+    ⣿⣁⣁⣿⣁⣁⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣀⣀⣀⣀⣀⣿
+    ⠻⣦⡀⢀⢀⢀⣴⠟
+        ⢻⣿⡏
     """,
 ]
 
 _CONVERT_FRAMES = [
     r"""
-     (｀・ω・´)
-      ╔════╗
-      ║ ██ ║
-      ╚════╝
+      ⢀⣀⣀⣀⣀
+     ⣿⣿⣿⣿⣿⣿
+     ⣿⡿⣿⣿⢿⣿
+     ⣿⣶⣿⣿⣶⣿
+     ⣿⣿⣿⣿⣿⣿
+     ⠸⣦⣀⣀⣴⠇
     """,
     r"""
-     (｀・ω・´)
-      ╔════╗
-      ║ ██ ║
-      ╚════╝
-       ░░░
+      ⢀⣀⣀⣀⣀
+     ⣿⣿⣿⣿⣿⣿
+     ⣿⢿⣿⣿⡿⣿
+     ⣿⣶⣿⣿⣶⣿
+     ⣿⣿⣿⣿⣿⣿
+     ⠸⣦⣀⣀⣴⠇
     """,
     r"""
-     (｀・ω・´)
-      ╔════╗
-      ║ ██ ║
-      ╚════╝
-      ░░░░
+      ⢀⣀⣀⣀⣀
+     ⣿⣿⣿⣿⣿⣿
+     ⣿⡿⣿⣿⢿⣿
+     ⣿⣶⣿⣿⣶⣿
+     ⣿⣿⣿⣿⣿⣿
+     ⠸⣦⣀⣀⣴⠇
     """,
     r"""
-     (｀・ω・´)
-      ╔════╗
-      ║ ██ ║
-      ╚════╝
-     ░░░░░
+      ⢀⣀⣀⣀⣀
+     ⣿⣿⣿⣿⣿⣿
+     ⣿⡿⣿⣿⢿⣿
+     ⣿⣶⣿⣿⣶⣿
+     ⣿⣿⣿⣿⣿⣿
+     ⠸⣦⣀⣀⣴⠇
     """,
 ]
 
 _SUCCESS_FRAMES = [
     r"""
-      ＼(^▽^)／
-       ／＼
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣶⣿⣶⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
     r"""
-      ／(^▽^)＼
-      ＼ ／
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣶⣿⣶⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
     r"""
-      ＼(^▽^)／
-       ／＼
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣶⣶⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
+    """,
+    r"""
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
 ]
 
 _DANCE_FRAMES = [
     r"""
-      ♪┏(・o・)┛♪
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⡟⠻⣿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣥⣀⣀⣬⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
     r"""
-      ♪┗(・o・)┓♪
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⡟⠻⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣥⣀⣀⣬⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
+    """,
+    r"""
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⡟⠻⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣥⣀⣀⣬⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
+    """,
+    r"""
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣿⣿⣿⡟⠻
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣥⣀⣀⣬⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
 ]
 
 _IDLE_FRAMES = [
     r"""
-     (　・ω・)
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⠿⣿⠿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⠘⢿⣿⣿⣿⡿⠁
     """,
     r"""
-     (　・ω・)∩
-    """,
-    r"""
-     (　・ω・)
-    """,
-    r"""
-      (　・ω・)∩
+     ⢀⣀⣀⣀⣀⡀
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⠿⣿⠿⣿⣿
+    ⣿⣿⣿⣿⣿⣿⣿
+    ⣿⣿⣀⣀⣀⣿⣿
+    ⠘⠻⣿⣿⣿⠟⠁
     """,
 ]
 
 _PLATFORM_KITS = {
     "youtube": "▶", "facebook": "f", "instagram": "@", "tiktok": "♪",
-    "twitter": "♯", "reddit": "r/", "twitch": "📺", "vimeo": "▷",
+    "twitter": "♯", "reddit": "r/", "twitch": "▤", "vimeo": "▷",
     "dailymotion": "▷", "tumblr": "t",
 }
-
-
-def _frames(base, duration=0.25):
-    """Generator that cycles through frames."""
-    i = 0
-    while True:
-        yield base[i % len(base)]
-        i += 1
-        time.sleep(duration)
 
 
 def _progress_bar(percent: float, width: int = 20) -> str:
@@ -226,8 +311,8 @@ def success_animation(console: Console, title: str = "", size: str = ""):
     for i in range(4):
         console.clear()
         frame = _SUCCESS_FRAMES[i % len(_SUCCESS_FRAMES)]
-        console.print(f"\n\n[bold green]{frame}[/]")
-        console.print(f"\n[bold green]  ✓ Download Complete![/]")
+        console.print(f"[bold green]{frame}[/]")
+        console.print(f"[bold green]  ✓ Download Complete![/]")
         if title:
             console.print(f"  [white]{title[:55]}[/]")
         if size:
@@ -236,23 +321,27 @@ def success_animation(console: Console, title: str = "", size: str = ""):
             console.print(f"  ╰{'─'*25}╯")
         time.sleep(0.4)
 
-    # Final dance
     for _ in range(2):
         for f in _DANCE_FRAMES:
             console.clear()
-            console.print(f"\n\n[bold green]{f}[/]")
-            console.print(f"\n[bold green]  (ﾉ ・ω・)ﾉ  Done! ヽ(・ω・ヽ)[/]")
+            console.print(f"[bold green]{f}[/]")
+            console.print(f"[bold green]  Done![/]")
             if size:
-                console.print(f"\n  [yellow]File size: {size}[/]")
+                console.print(f"  [yellow]Size: {size}[/]")
             time.sleep(0.3)
 
 
 def happy_start(console: Console):
     console.print(Panel(
-        r"""
-  ╭( ・ω・)╮
+        r"""[bold cyan]
+  ⣀⣀⣀⣀⣀⣀⡀
+ ⣿⣿⣿⣿⣿⣿⣿⣷
+ ⣿⣿⡟⠛⢿⣿⣿⣿
+ ⣿⣿⣿⣿⣿⣿⣿⣿
+ ⣿⣿⣀⣀⣀⣿⣿⣿
+ ⠻⣿⣿⣿⣿⣿⡟
   socmed-dl ready!
-""",
+[/bold cyan]""",
         border_style="cyan",
     ))
 
@@ -262,9 +351,9 @@ def connecting_animation(console: Console, platform: str, color: str = "cyan"):
     for i in range(3):
         console.clear()
         frame = _CONNECT_FRAMES[i % len(_CONNECT_FRAMES)]
-        console.print(f"\n\n[bold {color}]{frame}[/]")
         dots = "." * (i + 1)
-        console.print(f"\n[bold {color}]  [{kit}] Connecting to {platform}{dots}[/]")
+        console.print(f"[bold {color}]{frame}[/]")
+        console.print(f"[bold {color}]  [{kit}] Connecting to {platform}{dots}[/]")
         time.sleep(0.35 + i * 0.1)
 
 
@@ -279,7 +368,7 @@ def show_progress_card(
     bar = _progress_bar(percent)
     frame = _IDLE_FRAMES[int(time.time() * 2) % len(_IDLE_FRAMES)]
     console.clear()
-    console.print(f"\n[bold cyan]{frame}[/]")
+    console.print(f"[bold cyan]{frame}[/]")
     console.print(f"  Status: [cyan]{description}[/]")
     console.print(f"  [green]{bar}[/] [bold]{percent:.1f}%[/]")
     if speed:
