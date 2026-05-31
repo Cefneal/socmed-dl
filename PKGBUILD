@@ -2,7 +2,7 @@
 # PKGBUILD for socmed-dl - Social Media Downloader
 
 pkgname=socmed-dl
-pkgver=2.0.0
+pkgver=2.1.0
 pkgrel=1
 pkgdesc="Download video/music from 10+ platforms, convert to x265/AV1/VP9"
 arch=('any')

@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 PLATFORMS = {
@@ -57,9 +58,19 @@ def check_deps():
     return missing
 
 
+def default_downloads_dir() -> str:
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("USERPROFILE", "C:\\"), "Downloads")
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Downloads")
+    if "ANDROID_ROOT" in os.environ or "TERMUX_VERSION" in os.environ:
+        return os.path.expanduser("~/storage/downloads")
+    return os.path.expanduser("~/Downloads")
+
+
 def format_size(size_bytes: int) -> str:
     if size_bytes <= 0:
-        return "Unknown"
+        return "~?"
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if size_bytes < 1024:
             return f"{size_bytes:.1f} {unit}"
@@ -75,15 +86,49 @@ def format_duration(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
-CODEC_PRIORITY = {
-    "x265": ["h265", "hevc", "vp9", "av01", "h264"],
-    "x264": ["h264", "vp9", "hevc", "av01"],
-    "vp9": ["vp9", "av01", "h265", "h264"],
-    "av1": ["av01", "vp9", "h265", "h264"],
+def detect_hw_accel() -> str | None:
+    """Detect available HW encoder but default to None for reliability."""
+    return None
+
+
+def hw_encoder_name(hw: str) -> str | None:
+    return {
+        "nvenc": "hevc_nvenc",
+        "amf": "hevc_amf",
+        "qsv": "hevc_qsv",
+        "videotoolbox": "hevc_videotoolbox",
+    }.get(hw)
+
+
+def codec_family(vcodec: str) -> str:
+    v = vcodec.lower()
+    if "av01" in v or "av1" in v:
+        return "AV1"
+    if "vp9" in v:
+        return "VP9"
+    if "hevc" in v or "h265" in v or "x265" in v:
+        return "x265"
+    if "h264" in v or "avc" in v or "x264" in v:
+        return "x264"
+    return v.split(".")[0][:6]
+
+
+PLATFORM_EMOJI = {
+    "youtube": "🎬", "facebook": "📘", "instagram": "📸", "tiktok": "🎵",
+    "twitter": "🐦", "reddit": "🤖", "twitch": "📺", "vimeo": "🎥",
+    "dailymotion": "🎞", "tumblr": "💬",
+}
+PLATFORM_COLORS = {
+    "youtube": "red", "facebook": "blue", "instagram": "magenta",
+    "tiktok": "cyan", "twitter": "white", "reddit": "orange1",
+    "twitch": "purple", "vimeo": "bright_blue", "dailymotion": "yellow",
+    "tumblr": "bright_magenta", "unknown": "white",
 }
 
 
-def get_format_sort(codec: str, height: int) -> str:
-    priority = CODEC_PRIORITY.get(codec, CODEC_PRIORITY["x265"])
-    codec_sort = "+".join(f"codec:{c}" for c in priority)
-    return f"+{codec_sort},height:{height},tbr"
+def platform_emoji(platform: str) -> str:
+    return PLATFORM_EMOJI.get(platform, "🌐")
+
+
+def platform_color(platform: str) -> str:
+    return PLATFORM_COLORS.get(platform, "white")

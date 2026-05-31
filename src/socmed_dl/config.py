@@ -5,12 +5,14 @@ import os
 from pathlib import Path
 from typing import Any
 
+from socmed_dl.utils import default_downloads_dir
+
 DEFAULT_CONFIG = {
     "quality": 720,
     "mode": "video",
     "codec": "x265",
     "audio_format": "mp3",
-    "output_dir": ".",
+    "output_dir": default_downloads_dir(),
     "concurrent": 1,
     "crf": 28,
     "preset": "medium",
@@ -20,7 +22,7 @@ DEFAULT_CONFIG = {
     "subtitle_lang": "en",
     "cookies_file": "",
     "proxy": "",
-    "output_template": "%(title)s_%(height)s",
+    "output_template": "%(title)s",
     "auto_convert": True,
     "keep_original": False,
     "max_filesize": 0,
