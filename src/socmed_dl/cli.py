@@ -73,8 +73,17 @@ def show_help():
 
 
 def main():
+    # Early version/help check before argparse
+    if "-v" in sys.argv or "--version" in sys.argv:
+        print(f"socmed-dl v{__version__}")
+        return 0
+    if not any(a for a in sys.argv[1:] if not a.startswith("-")) and len(sys.argv) > 1:
+        if "-h" in sys.argv or "--help" in sys.argv:
+            show_help()
+            return 0
+
     parser = argparse.ArgumentParser(add_help=False, usage="socmed-dl [URL] [quality] [options]")
-    parser.add_argument("url", nargs="+", help="Video URL(s)")
+    parser.add_argument("url", nargs="*", help="Video URL(s)")
     parser.add_argument("--audio", "-a", action="store_true", help="Audio mode")
     parser.add_argument("--audio-format", default=None, help="Audio format")
     parser.add_argument("--codec", "-c", default=None, help="Video codec")
@@ -106,9 +115,6 @@ def main():
 
     if args.help:
         show_help()
-    if args.version:
-        print(f"socmed-dl v{__version__}")
-        sys.exit(0)
 
     # Interactive mode
     if not args.url:
