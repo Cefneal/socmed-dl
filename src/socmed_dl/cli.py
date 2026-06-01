@@ -7,7 +7,7 @@ import sys
 from rich.console import Console
 
 from socmed_dl import __version__
-from socmed_dl.app import interactive, banner
+from socmed_dl.app import interactive, show_banner
 from socmed_dl.config import load as load_config
 from socmed_dl.downloader import Downloader, CODEC_INFO
 from socmed_dl.utils import check_deps, find_yt_dlp, default_downloads_dir, format_duration
@@ -18,7 +18,7 @@ console = Console()
 
 
 def show_help():
-    console.print(banner(), style="bold cyan")
+    show_banner(console)
     console.print("""
 Usage: socmed-dl [URL] [options]
 

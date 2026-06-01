@@ -1,6 +1,7 @@
 """Interactive TUI — URL → mode → pick codec → pick res → convert? → done"""
 
 import os
+import sys
 
 from rich import box
 from rich.console import Console
@@ -37,16 +38,83 @@ CONVERT_CHOICES = {
 }
 
 
-def banner() -> str:
-    return r"""
-                            ▄
- █▀▀  █▀█  █▀▀  █▄█  █▀▀  █▀▄
- ▀▀█  █ █  █    █ █  █▀▀  █ █
- ▀▀▀  ▀▀▀  ▀▀▀  ▀ ▀  ▀▀▀  ▀▀
----------------------------------
-  YouTube · TikTok · Instagram · FB
-  Twitter · Reddit · Twitch · Vimeo
-"""
+_SHADOW = [
+    "███████╗ ██████╗ ███╗   ███╗███████╗██████╗ ██╗     ",
+    "██╔════╝██╔═══██╗████╗ ████║██╔════╝██╔══██╗██║     ",
+    "███████╗██║   ██║██╔████╔██║█████╗  ██║  ██║██║     ",
+    "╚════██║██║   ██║██║╚██╔╝██║██╔══╝  ██║  ██║██║     ",
+    "███████║╚██████╔╝██║ ╚═╝ ██║███████╗██████╔╝███████╗",
+    "╚══════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝╚═════╝ ╚══════╝",
+]
+
+_PLATFORM_NAMES = [
+    "YouTube · TikTok · Instagram · FB",
+    "Twitter · Reddit · Twitch · Vimeo",
+]
+
+_SHADOW_W = max(len(l) for l in _SHADOW)  # 52
+_BOX_W = _SHADOW_W + 2  # 54
+
+
+def _box(console: Console) -> None:
+    top = Text("╔" + "═" * _SHADOW_W + "╗", style="cyan")
+    bottom = Text("╚" + "═" * _SHADOW_W + "╝", style="cyan")
+    console.print(top, justify="center")
+    for line in _SHADOW:
+        t = Text()
+        t.append("║", style="cyan")
+        t.append(line, style="bold cyan")
+        t.append("║", style="cyan")
+        console.print(t, justify="center")
+    console.print(bottom, justify="center")
+
+
+def show_banner(console: Console) -> None:
+    _box(console)
+    console.print()
+    for line in _PLATFORM_NAMES:
+        console.print(f"[bold]{line}[/]", justify="center")
+    console.print()
+    console.print(f"[dim]v{__version__} • paste URL to start (or 'q' to quit)[/dim]", justify="center")
+
+
+def show_centered(console: Console, extra_bottom: int = 0) -> None:
+    h = console.height
+    art_h = len(_SHADOW) + 2
+    plat_h = len(_PLATFORM_NAMES)
+    content = art_h + 1 + plat_h + 1 + 1 + 2 + extra_bottom
+    pad = max(0, (h - content) // 2)
+    for _ in range(pad):
+        console.print()
+
+    _box(console)
+    console.print()
+    for line in _PLATFORM_NAMES:
+        console.print(f"[bold]{line}[/]", justify="center")
+    console.print()
+    console.print(f"[dim]v{__version__} • paste URL to start (or 'q' to quit)[/dim]", justify="center")
+    console.print()
+
+
+def chat_input(console: Console) -> str:
+    cw = min(console.width - 4, _SHADOW_W + 20)
+    left_pad = max(0, (console.width - cw) // 2)
+
+    console.print(" " * left_pad + "╭" + "─" * (cw - 2) + "╮")
+
+    label = "│  ⊙ Paste video URL:"
+    label_pad = cw - 2 - len(label)
+    console.print(" " * left_pad + label + " " * max(label_pad, 0) + " │")
+
+    line = " " * left_pad + "│  " + " " * (cw - 5) + " │"
+    sys.stdout.write(line)
+    sys.stdout.write("\r" + " " * left_pad + "│  ")
+    sys.stdout.flush()
+    url = sys.stdin.readline().strip()
+
+    sys.stdout.write("\r" + " " * left_pad + "│" + " " * (cw - 2) + "│\n")
+    console.print(" " * left_pad + "╰" + "─" * (cw - 2) + "╝")
+    return url
 
 
 def format_big_bits(tbr: float) -> str:
@@ -78,8 +146,7 @@ def _sanitize_prefix(title: str) -> str:
 def interactive():
     while True:
         console.clear()
-        console.print(banner(), style="bold cyan")
-        console.print(f"  [dim]v{__version__} • paste URL to start (or 'q' to quit)[/dim]\n")
+        show_centered(console)
 
         deps = check_deps()
         if deps:
@@ -95,7 +162,7 @@ def interactive():
         cfg = load_config()
         downloader = Downloader()
 
-        url = Prompt.ask("[bold cyan]⊙ Paste video URL[/bold cyan]")
+        url = chat_input(console)
         if url.lower() in ("q", "quit", "exit"):
             console.print("[yellow]Bye![/yellow]")
             return
@@ -109,7 +176,8 @@ def interactive():
         emoji = platform_emoji(platform)
 
         console.clear()
-        console.print(banner(), style="bold cyan")
+        show_centered(console)
+        console.print()
 
         with console.status(f"[bold {color}]{emoji} Fetching info from {platform}...[/]", spinner="dots"):
             formats, title, duration = downloader.list_combined(url)
@@ -160,7 +228,7 @@ def interactive():
         # ── Step 2: Codec picker ─────────────────────────────────────────
         if is_video:
             console.clear()
-            console.print(banner(), style="bold cyan")
+            show_centered(console)
             console.print(info)
 
             codecs = downloader.get_codecs(formats)
@@ -191,7 +259,7 @@ def interactive():
 
             # ── Step 3: Resolution picker (renumbered from 1!) ───────────
             console.clear()
-            console.print(banner(), style="bold cyan")
+            show_centered(console)
             console.print(info)
 
             codec_formats = Downloader.filter_by_codec(formats, selected_codec)
@@ -246,7 +314,7 @@ def interactive():
 
         if is_video and selected_video:
             console.clear()
-            console.print(banner(), style="bold cyan")
+            show_centered(console)
             console.print(info)
 
             console.print(f"\n[bold]Convert options for [green]{selected_video.quality_label}[/] [green]{selected_codec}[/]:[/]")
