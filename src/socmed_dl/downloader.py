@@ -57,12 +57,12 @@ class DownloadProgress:
     total: str = ""
 
 
-CODEC_ORDER = {"VP9": 0, "AV1": 1, "x264": 2, "x265": 3}
+CODEC_ORDER = {"x264": 0, "VP9": 1, "AV1": 2, "x265": 3}
 
 CODEC_INFO = {
+    "x264": "Universal — plays on everything, largest files",
     "VP9": "Google — great quality, medium files, 60fps capable",
     "AV1": "Latest — best compression, may not play on old devices",
-    "x264": "Universal — largest files, plays on everything",
     "x265": "HEVC — good compression, mixed support",
 }
 

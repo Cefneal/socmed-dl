@@ -12,7 +12,7 @@ from socmed_dl.config import load as load_config
 from socmed_dl.downloader import Downloader, CODEC_INFO
 from socmed_dl.utils import check_deps, find_yt_dlp, default_downloads_dir
 from socmed_dl.converter import convert_video
-from socmed_dl.animation import animate_download, animate_convert, happy_start
+from socmed_dl.animation import animate_download, animate_convert
 
 console = Console()
 
@@ -28,7 +28,7 @@ Arguments:
   URL                  Video URL
 
 Options:
-  --codec              Codec preference: VP9, AV1, x264  (default: best)
+  --codec              Codec preference: x264, VP9, AV1  (default: best)
   --keep-original      Don't re-encode, keep original codec
   --to-x265            Convert to x265 (HEVC) after download
   --audio, -a          Download audio only
@@ -58,7 +58,7 @@ def main():
 
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("url", nargs="?", default=None)
-    parser.add_argument("--codec", default=None, help="VP9, AV1, or x264")
+    parser.add_argument("--codec", default=None, help="x264, VP9, or AV1")
     parser.add_argument("--keep-original", action="store_true", help="No re-encode")
     parser.add_argument("--to-x265", action="store_true", help="Convert to x265")
     parser.add_argument("--audio", "-a", action="store_true")
@@ -72,7 +72,6 @@ def main():
     args, _ = parser.parse_known_args()
 
     if not args.url:
-        happy_start(console)
         interactive()
         return 0
 

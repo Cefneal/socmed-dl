@@ -19,10 +19,7 @@ from socmed_dl.utils import (
     default_downloads_dir, platform_emoji, platform_color, find_yt_dlp,
 )
 from socmed_dl.converter import convert_video
-from socmed_dl.animation import (
-    animate_download, animate_convert, success_animation,
-    happy_start, connecting_animation,
-)
+from socmed_dl.animation import animate_download, animate_convert
 
 console = Console()
 
@@ -114,7 +111,6 @@ def interactive():
     color = platform_color(platform)
     emoji = platform_emoji(platform)
 
-    connecting_animation(console, platform.upper(), color)
     console.clear()
     console.print(banner(), style="bold cyan")
 
@@ -227,9 +223,9 @@ def interactive():
         console.print(res_table)
 
         size_note = {
+            "x264": "[bold green]x264:[/] plays on everything, largest files",
             "VP9": "[bold blue]VP9:[/] great quality, medium files",
             "AV1": "[bold yellow]AV1:[/] best compression, needs modern device",
-            "x264": "[bold green]x264:[/] largest files, plays on everything",
             "x265": "[bold red]x265:[/] HEVC, good compression",
         }.get(selected_codec, "")
 
@@ -398,7 +394,6 @@ def interactive():
             except OSError:
                 pass
 
-        success_animation(console, title=title, size=size_str)
     else:
         console.print(Panel("[red]Download failed![/]", border_style="red"))
 
