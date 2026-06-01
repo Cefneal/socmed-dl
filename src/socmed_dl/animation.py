@@ -2,11 +2,54 @@
 
 from typing import Callable
 
-from rich.progress import (
-    BarColumn, Progress, SpinnerColumn, TextColumn,
-    TimeRemainingColumn, TransferSpeedColumn,
-)
 from rich.console import Console
+from rich.live import Live
+from rich.text import Text
+from rich.progress_bar import ProgressBar
+
+
+_SPINNER_FRAMES = ["-", "\\", "|", "/"]
+
+
+class _ProgressDisplay:
+    def __init__(self, description: str = "", total: float = 100, color: str = "cyan"):
+        self.description = description
+        self.total = total
+        self.completed = 0.0
+        self.color = color
+        self._spin = 0
+        self._speed = ""
+        self._eta = ""
+
+    def update(self, completed: float, description: str | None = None, speed: str = "", eta: str = ""):
+        self.completed = min(completed, self.total)
+        if description is not None:
+            self.description = description
+        if speed:
+            self._speed = speed
+        if eta:
+            self._eta = eta
+
+    def _render_spinner(self) -> str:
+        return _SPINNER_FRAMES[self._spin % len(_SPINNER_FRAMES)]
+
+    def __rich__(self) -> Text:
+        self._spin += 1
+        pct = self.completed / self.total * 100 if self.total > 0 else 0
+        bar = ProgressBar(self.completed, self.total, width=40)
+        info = f"{pct:>5.1f}%"
+        if self._speed:
+            info += f"  {self._speed}"
+        if self._eta:
+            info += f"  ETA {self._eta}"
+        spinner = self._render_spinner()
+        return Text.assemble(
+            (f"{spinner} ", self.color),
+            (self.description[:50], self.color),
+            (" ", ""),
+            (bar, ""),
+            (f" {info}", ""),
+        )
 
 
 def animate_download(
@@ -20,30 +63,18 @@ def animate_download(
         console = Console()
 
     result = [False]
+    display = _ProgressDisplay(description="Downloading...", total=100, color=color)
 
-    progress = Progress(
-        SpinnerColumn(spinner_name="dots", style=color),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=40),
-        "[progress.percentage]{task.percentage:>3.1f}%",
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
-        console=console,
-        transient=True,
-    )
+    with Live(display, console=console, refresh_per_second=10, transient=True):
+        def on_progress(dp):
+            if dp.percent > 0:
+                display.update(
+                    completed=dp.percent,
+                    description=dp.filename[:50] if dp.filename else "Downloading...",
+                    speed=dp.speed,
+                    eta=dp.eta,
+                )
 
-    dl_task = progress.add_task(f"[{color}]Downloading...[/]", total=None)
-
-    def on_progress(dp):
-        nonlocal dl_task
-        if dp.percent > 0:
-            if progress.tasks[dl_task].total is None:
-                progress.update(dl_task, total=100)
-            progress.update(dl_task, completed=dp.percent)
-        if dp.filename:
-            progress.update(dl_task, description=f"[{color}]{dp.filename[:45]}")
-
-    with progress:
         result[0] = download_fn(on_progress)
 
     return result[0]
@@ -57,35 +88,26 @@ def animate_convert(
         console = Console()
 
     result = [False]
+    display = _ProgressDisplay(description="Converting...", total=100, color="green")
 
-    progress = Progress(
-        SpinnerColumn(spinner_name="dots", style="green"),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=40),
-        "[progress.percentage]{task.percentage:>3.1f}%",
-        TimeRemainingColumn(),
-        console=console,
-        transient=True,
-    )
+    with Live(display, console=console, refresh_per_second=10, transient=True):
+        def on_convert(p: dict):
+            if p.get("status") == "progress":
+                display.update(
+                    completed=p.get("percent", 0),
+                    description=f"Convert {p.get('file', '')[:40]}" if p.get("file") else "Converting...",
+                )
+            elif p.get("status") == "start":
+                display.update(
+                    completed=0,
+                    description=f"Convert {p.get('file', '')[:40]}..." if p.get("file") else "Converting...",
+                )
+            elif p.get("status") == "done":
+                display.update(completed=100, description="Convert complete")
+                result[0] = True
+            elif p.get("status") == "error":
+                display.update(completed=0, description="Conversion failed")
 
-    conv_task = progress.add_task("[green]Converting...", total=100)
-
-    def on_convert(p: dict):
-        if p.get("status") == "progress":
-            progress.update(
-                conv_task,
-                completed=p.get("percent", 0),
-                description=f"[green]Convert {p.get('file', '')[:35]}[/]",
-            )
-        elif p.get("status") == "start":
-            progress.update(conv_task, total=100, completed=0, description=f"[green]Convert {p.get('file', '')[:35]}...")
-        elif p.get("status") == "done":
-            progress.update(conv_task, completed=100, description="[green]✓ Convert complete")
-            result[0] = True
-        elif p.get("status") == "error":
-            progress.update(conv_task, description="[red]✗ Conversion failed")
-
-    with progress:
         convert_fn(on_convert)
 
     return result[0]
