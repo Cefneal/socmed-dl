@@ -2,10 +2,11 @@
 
 from typing import Callable
 
-from rich.console import Console
+from rich.console import Console, ConsoleOptions, RenderResult
 from rich.live import Live
 from rich.text import Text
 from rich.progress_bar import ProgressBar
+from rich.segment import Segment
 
 
 _SPINNER_FRAMES = ["-", "\\", "|", "/"]
@@ -33,23 +34,26 @@ class _ProgressDisplay:
     def _render_spinner(self) -> str:
         return _SPINNER_FRAMES[self._spin % len(_SPINNER_FRAMES)]
 
-    def __rich__(self) -> Text:
+    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
         self._spin += 1
         pct = self.completed / self.total * 100 if self.total > 0 else 0
-        bar = ProgressBar(self.completed, self.total, width=40)
         info = f"{pct:>5.1f}%"
         if self._speed:
             info += f"  {self._speed}"
         if self._eta:
             info += f"  ETA {self._eta}"
         spinner = self._render_spinner()
-        return Text.assemble(
+
+        bar = ProgressBar(self.completed, self.total, width=40)
+        text = Text.assemble(
             (f"{spinner} ", self.color),
             (self.description[:50], self.color),
-            (" ", ""),
-            (bar, ""),
-            (f" {info}", ""),
         )
+
+        yield from (s for s in console.render(text) if s.text != "\n")
+        yield Segment(" ")
+        yield from (s for s in console.render(bar) if s.text != "\n")
+        yield Segment(f" {info}")
 
 
 def animate_download(
