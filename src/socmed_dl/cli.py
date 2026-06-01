@@ -50,6 +50,14 @@ CLI flow (no auto convert):
 
 
 def main():
+    try:
+        return _main()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted[/]")
+        return 130
+
+
+def _main():
     if "-v" in sys.argv or "--version" in sys.argv:
         print(f"socmed-dl v{__version__}")
         return 0
@@ -168,8 +176,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Interrupted[/]")
-        sys.exit(130)
+    sys.exit(main())
