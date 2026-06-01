@@ -32,7 +32,6 @@ def find_yt_dlp() -> str | None:
     candidates = [
         shutil.which("yt-dlp"),
         os.path.expanduser("~/.local/bin/yt-dlp"),
-        str(Path.home() / ".local" / "bin" / "yt-dlp"),
         shutil.which("youtube-dl"),
     ]
     for c in candidates:
@@ -68,8 +67,8 @@ def default_downloads_dir() -> str:
     return os.path.expanduser("~/Downloads")
 
 
-def format_size(size_bytes: int) -> str:
-    if size_bytes <= 0:
+def format_size(size_bytes: int | None) -> str:
+    if not size_bytes or size_bytes <= 0:
         return "~?"
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if size_bytes < 1024:

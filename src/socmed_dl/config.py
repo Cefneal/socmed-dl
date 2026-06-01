@@ -34,6 +34,8 @@ DEFAULT_CONFIG = {
     "log_level": "INFO",
 }
 
+_cache: dict | None = None
+
 
 def config_dir() -> Path:
     xdg = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
@@ -45,6 +47,9 @@ def config_file() -> Path:
 
 
 def load() -> dict:
+    global _cache
+    if _cache is not None:
+        return _cache
     cfg = dict(DEFAULT_CONFIG)
     cf = config_file()
     if cf.exists():
@@ -54,17 +59,20 @@ def load() -> dict:
             cfg.update(user)
         except (json.JSONDecodeError, OSError):
             pass
+    _cache = cfg
     return cfg
 
 
 def save(cfg: dict):
+    global _cache
     cf = config_file()
     cf.parent.mkdir(parents=True, exist_ok=True)
     with open(cf, "w") as f:
         json.dump(cfg, f, indent=2)
+    _cache = dict(cfg)
 
 
-def get(key: str, default=None) -> Any:
+def get(key: str, default: Any = None) -> Any:
     return load().get(key, default)
 
 

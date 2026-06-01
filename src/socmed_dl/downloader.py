@@ -250,6 +250,7 @@ class Downloader:
                     self._progress_callback(dp)
             if self._cancel:
                 process.terminate()
+                process.wait()
                 return False
 
         process.wait()

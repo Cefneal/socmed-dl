@@ -10,7 +10,7 @@ from socmed_dl import __version__
 from socmed_dl.app import interactive, banner
 from socmed_dl.config import load as load_config
 from socmed_dl.downloader import Downloader, CODEC_INFO
-from socmed_dl.utils import check_deps, find_yt_dlp, default_downloads_dir
+from socmed_dl.utils import check_deps, find_yt_dlp, default_downloads_dir, format_duration
 from socmed_dl.converter import convert_video
 from socmed_dl.animation import animate_download, animate_convert
 
@@ -19,7 +19,7 @@ console = Console()
 
 def show_help():
     console.print(banner(), style="bold cyan")
-    print(f"""
+    console.print("""
 Usage: socmed-dl [URL] [options]
 
 Without URL: starts interactive TUI
@@ -86,21 +86,20 @@ def main():
 
     if args.list_formats:
         fmts, title, dur = dl.list_combined(args.url)
-        from socmed_dl.utils import format_duration
         dur_str = format_duration(dur) if dur else "?"
-        print(f"\n  Title: {title}  ({dur_str})")
+        console.print(f"\n  Title: {title}  ({dur_str})")
         codecs = dl.get_codecs(fmts)
-        print(f"  Available codecs: {', '.join(codecs)}\n")
+        console.print(f"  Available codecs: {', '.join(codecs)}\n")
         for c in codecs:
             badge = {"VP9": "blue", "AV1": "yellow", "x264": "green", "x265": "red"}.get(c, "white")
             desc = CODEC_INFO.get(c, "")
-            print(f"  [bold {badge}]{c}:[/] {desc}")
-            print()
-        print(f"    {'#':>3}  {'Quality':>7}  {'Codec':>6}  {'Size':>9}  {'Resolution':>12}")
-        print(f"    {'─'*3}  {'─'*7}  {'─'*6}  {'─'*9}  {'─'*12}")
+            console.print(f"  [bold {badge}]{c}:[/] {desc}")
+            console.print()
+        console.print(f"    {'#':>3}  {'Quality':>7}  {'Codec':>6}  {'Size':>9}  {'Resolution':>12}")
+        console.print(f"    {'─'*3}  {'─'*7}  {'─'*6}  {'─'*9}  {'─'*12}")
         for f in fmts:
             q = f.quality_label
-            print(f"    {f.num:>3}  {q:>7}  {f.codec:>6}  {f.size_str:>9}  {f.resolution:>12}")
+            console.print(f"    {f.num:>3}  {q:>7}  {f.codec:>6}  {f.size_str:>9}  {f.resolution:>12}")
         return 0
 
     fmts, title, dur = dl.list_combined(args.url)
@@ -148,11 +147,19 @@ def main():
     )
 
     if ok and do_convert:
-        console.print("[yellow]Converting to x265...[/]")
-        animate_convert(
-            lambda cb: convert_video(outdir, progress_callback=cb),
+        convert_ok = animate_convert(
+            lambda cb: convert_video(
+                outdir,
+                keep_original=cfg.get("keep_original", False),
+                crf=cfg.get("crf", 28),
+                preset=cfg.get("preset", "medium"),
+                progress_callback=cb,
+            ),
             console=console,
         )
+        if not convert_ok:
+            console.print("[red]Conversion failed[/]")
+            return 1
 
     if ok:
         console.print(f"[green]✓ Saved to {outdir}[/]")

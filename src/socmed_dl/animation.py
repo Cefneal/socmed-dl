@@ -24,11 +24,12 @@ def animate_download(
     progress = Progress(
         SpinnerColumn(spinner_name="dots", style=color),
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
+        BarColumn(bar_width=40),
         "[progress.percentage]{task.percentage:>3.1f}%",
         TransferSpeedColumn(),
         TimeRemainingColumn(),
         console=console,
+        transient=True,
     )
 
     dl_task = progress.add_task(f"[{color}]Downloading...[/]", total=None)
@@ -60,19 +61,26 @@ def animate_convert(
     progress = Progress(
         SpinnerColumn(spinner_name="dots", style="green"),
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None),
+        BarColumn(bar_width=40),
         "[progress.percentage]{task.percentage:>3.1f}%",
+        TimeRemainingColumn(),
         console=console,
+        transient=True,
     )
 
-    conv_task = progress.add_task("[green]Converting...", total=1)
+    conv_task = progress.add_task("[green]Converting...", total=100)
 
     def on_convert(p: dict):
-        if p.get("status") == "start":
-            progress.update(conv_task, total=1, description=f"[green]Convert {p.get('file', '')}...")
-            progress.update(conv_task, completed=0)
+        if p.get("status") == "progress":
+            progress.update(
+                conv_task,
+                completed=p.get("percent", 0),
+                description=f"[green]Convert {p.get('file', '')[:35]}[/]",
+            )
+        elif p.get("status") == "start":
+            progress.update(conv_task, total=100, completed=0, description=f"[green]Convert {p.get('file', '')[:35]}...")
         elif p.get("status") == "done":
-            progress.update(conv_task, completed=1, description="[green]✓ Convert complete")
+            progress.update(conv_task, completed=100, description="[green]✓ Convert complete")
             result[0] = True
         elif p.get("status") == "error":
             progress.update(conv_task, description="[red]✗ Conversion failed")

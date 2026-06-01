@@ -1,11 +1,26 @@
 """x265 / codec conversion engine with hardware acceleration support"""
 
 import os
+import re
+import select
 import subprocess
 from pathlib import Path
 from typing import Callable
 
 from socmed_dl.utils import find_ffmpeg, find_ffprobe, detect_hw_accel, hw_encoder_name
+
+
+TIME_RE = re.compile(r'time=(\d+):(\d+):(\d+)\.(\d+)')
+
+
+def _parse_ffmpeg_time(line: str) -> float | None:
+    m = TIME_RE.search(line)
+    if not m:
+        return None
+    h, mi, s, frac = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+    frac_str = m.group(4)
+    divisor = 10 ** len(frac_str)
+    return h * 3600 + mi * 60 + s + frac / divisor
 
 
 def convert_video(
@@ -37,9 +52,6 @@ def convert_video(
             continue
         output = mkv.parent / f"{mkv.stem}_x265{mkv.suffix}"
 
-        if progress_callback:
-            progress_callback({"status": "start", "file": mkv.name, "percent": 0})
-
         total_duration = None
         try:
             r = subprocess.run(
@@ -48,24 +60,56 @@ def convert_video(
                 capture_output=True, text=True, timeout=15,
             )
             total_duration = float(r.stdout.strip())
-        except (ValueError, TypeError, OSError):
+        except (ValueError, TypeError, OSError, subprocess.TimeoutExpired):
             pass
+
+        if progress_callback:
+            progress_callback({"status": "start", "file": mkv.name, "percent": 0})
 
         cmd = [ffmpeg, "-i", str(mkv), "-c:v", encoder, *enc_params,
                "-c:a", "copy", "-movflags", "+faststart", "-y", str(output)]
 
-        try:
-            r = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=3600,
-            )
-        except subprocess.TimeoutExpired:
-            if progress_callback:
-                progress_callback({"status": "error", "file": mkv.name})
-            success = False
-            continue
+        process = subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            text=True, bufsize=1,
+        )
 
-        if r.returncode != 0:
-            error_msg = r.stderr[-300:] if r.stderr else "?"
+        last_report = 0.0
+        deadline = 3600.0
+        import time as _time
+        start = _time.monotonic()
+
+        try:
+            while True:
+                if _time.monotonic() - start > deadline:
+                    process.kill()
+                    break
+                r, _, _ = select.select([process.stderr], [], [], 1.0)
+                if not r:
+                    if process.poll() is not None:
+                        break
+                    continue
+                line = process.stderr.readline()
+                if not line:
+                    break
+                t = _parse_ffmpeg_time(line)
+                if t is not None and total_duration and total_duration > 0:
+                    pct = min(t / total_duration * 100, 99.9)
+                    if pct - last_report >= 1.0:
+                        last_report = pct
+                        if progress_callback:
+                            progress_callback({
+                                "status": "progress",
+                                "file": mkv.name,
+                                "percent": pct,
+                            })
+
+            process.wait()
+        except Exception:
+            process.kill()
+            process.wait()
+
+        if process.returncode != 0:
             if progress_callback:
                 progress_callback({"status": "error", "file": mkv.name})
             success = False
@@ -75,11 +119,16 @@ def convert_video(
             Path(mkv).unlink(missing_ok=True)
 
         if progress_callback:
+            size = 0
+            try:
+                size = os.path.getsize(output)
+            except OSError:
+                pass
             progress_callback({
                 "status": "done",
                 "file": mkv.name,
                 "output": str(output),
-                "size": os.path.getsize(output),
+                "size": size,
             })
 
     return success
