@@ -62,9 +62,10 @@ install_socmed_dl() {
         python3 -m pip install --quiet --upgrade "$SELF_DIR" 2>/dev/null && { ok "socmed-dl installed from source"; return; }
     fi
 
-    # Fallback: pip from GitHub
-    info "Installing from GitHub..."
-    python3 -m pip install --quiet --upgrade "git+${REPO}.git" 2>/dev/null && { ok "socmed-dl installed from GitHub"; return; }
+    # Fallback: pip from GitHub release
+    WHL_URL="${REPO}/releases/latest/download/socmed_dl-2.2.1-py3-none-any.whl"
+    info "Installing from GitHub release..."
+    python3 -m pip install --quiet --upgrade "$WHL_URL" 2>/dev/null && { ok "socmed-dl installed from GitHub release"; return; }
 
     # Final fallback: venv
     info "Setting up virtual environment..."
@@ -73,7 +74,7 @@ install_socmed_dl() {
     if [[ -d "$SELF_DIR/src" ]]; then
         "$VENV_DIR/bin/pip" install "$SELF_DIR"
     else
-        "$VENV_DIR/bin/pip" install "git+${REPO}.git"
+        "$VENV_DIR/bin/pip" install "${REPO}/releases/latest/download/socmed_dl-2.2.1-py3-none-any.whl"
     fi
     mkdir -p "$BIN_DIR"
     cat > "$BIN_DIR/socmed-dl" << 'VEOF'

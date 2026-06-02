@@ -48,13 +48,14 @@ if (-not (Test-Command yt-dlp)) {
 Write-Host "[INFO]  Installing socmed-dl..." -ForegroundColor Cyan
 python -m pip install rich --quiet 2>&1 | Out-Null
 
-# Try pip from GitHub
+# Try pip from GitHub release
 $pipOk = $false
-python -m pip install "git+https://github.com/Cefneal/socmed-dl.git" --quiet 2>&1 | Out-Null
+$whlUrl = "https://github.com/Cefneal/socmed-dl/releases/latest/download/socmed_dl-2.2.1-py3-none-any.whl"
+python -m pip install $whlUrl --quiet 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) { $pipOk = $true }
 
 if (-not $pipOk) {
-    # Fallback: download ZIP
+    # Fallback: download ZIP from GitHub
     $url = "https://github.com/Cefneal/socmed-dl/archive/main.zip"
     Invoke-WebRequest -UseBasicParsing $url -OutFile "$env:TEMP\socmed-dl.zip"
     Expand-Archive "$env:TEMP\socmed-dl.zip" -DestinationPath "$env:TEMP\socmed-dl" -Force

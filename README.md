@@ -71,7 +71,7 @@ socmed-dl
 
 ### Via pip (any OS)
 ```bash
-pip install socmed-dl
+pip install https://github.com/Cefneal/socmed-dl/releases/latest/download/socmed_dl-2.2.1-py3-none-any.whl
 ```
 
 ### Docker
