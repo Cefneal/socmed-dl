@@ -18,7 +18,6 @@
     <a href="#-docker"><kbd>🐳 Docker</kbd></a>
   </p>
 
-  [![PyPI](https://img.shields.io/pypi/v/socmed-dl)](https://pypi.org/project/socmed-dl/)
   [![GitHub Release](https://img.shields.io/github/v/release/Cefneal/socmed-dl)](https://github.com/Cefneal/socmed-dl/releases)
   ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-success)
   [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/Cefneal/socmed-dl/pkgs/container/socmed-dl)
@@ -44,8 +43,7 @@ cd socmed-dl && makepkg -si
 
 ### macOS
 ```bash
-brew install ffmpeg python
-pip3 install socmed-dl
+curl -sL https://github.com/Cefneal/socmed-dl/raw/main/install.sh | bash
 socmed-dl
 ```
 
@@ -57,15 +55,15 @@ powershell -ExecutionPolicy Bypass -c "iex (iwr -UseBasicParsing https://github.
 # Or manual:
 winget install FFmpeg
 winget install yt-dlp
-pip install socmed-dl
+pip install https://github.com/Cefneal/socmed-dl/releases/latest/download/socmed_dl-2.2.1-py3-none-any.whl
 socmed-dl
 ```
 
 ### Android (Termux)
 ```bash
 pkg update && pkg upgrade -y
-pkg install python ffmpeg -y
-pip install yt-dlp socmed-dl
+pkg install python ffmpeg yt-dlp -y
+curl -sL https://github.com/Cefneal/socmed-dl/raw/main/install.sh | bash
 socmed-dl
 ```
 
@@ -201,6 +199,7 @@ src/socmed_dl/
 ├── __main__.py     # python -m entry
 ├── cli.py          # CLI argument parsing + main()
 ├── app.py          # Interactive TUI (Rich)
+├── animation.py    # Live progress animations (download/convert)
 ├── config.py       # Config file manager
 ├── downloader.py   # yt-dlp wrapper (formats, batch, resume)
 ├── converter.py    # ffmpeg x265/AV1/VP9 conversion
